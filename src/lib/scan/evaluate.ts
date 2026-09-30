@@ -229,14 +229,14 @@ export async function runScan(scan: Scan, opts?: ScanRunOpts): Promise<ScanRunRe
   // every registry id referenced must be computable — attrSeries returns null
   // for those, which we surface by pre-walking the tree.
   const walkTerms = (expr: Expr) => {
-    for (const x of expr) {
+    for (const x of expr ?? []) {
       if (x.t === "op") continue;
       if (x.t === "attr") {
         if (!byId(x.name)) stats.unevaluable.add(x.name);
       } else if (x.t === "fn") {
         if (!byId(x.name)) stats.unevaluable.add(x.name);
-        x.args.forEach(walkTerms);
-      } else if (x.t === "bracket") walkTerms(x.inner);
+        for (const a of x.args ?? []) walkTerms(a);
+      } else if (x.t === "bracket") walkTerms(x.inner ?? []);
     }
   };
   const walkGroup = (g: Group) => {

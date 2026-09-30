@@ -139,25 +139,36 @@ export async function GET(req: Request) {
   let hasPro = false;
   let semantics: CondSemantics = "legacy";
   if (condRaw) {
+    let parsed: unknown;
     try {
-      const parsed: unknown = JSON.parse(condRaw);
-      if (Array.isArray(parsed)) {
-        condRows = parsed.slice(0, MAX_COND_ROWS) as ProRowWire[];
-        hasPro = condRows.some(
-          (r) => r != null && typeof r === "object" && ((r as { kind?: unknown }).kind === "expr" || (r as { kind?: unknown }).kind === "pattern")
-        );
-      } else if (isV3Payload(parsed)) {
-        // v3 — sentence-style scan builder (registry-whitelisted vectorised evaluator)
-        return await runScanV3(parsed, url, sort, dir, page, perPage);
-      } else if (isV2Payload(parsed)) {
-        condRows = (parsed.rows as ProRowWire[]).slice(0, MAX_COND_ROWS);
-        const rawBase = (parsed as { base?: unknown }).base;
-        baseRows = Array.isArray(rawBase) ? (rawBase as ProRowWire[]).slice(0, 10) : [];
-        semantics = "v2";
-        hasPro = condRows.length > 0 || baseRows.length > 0;
-      }
+      parsed = JSON.parse(condRaw);
     } catch {
       return NextResponse.json({ error: "Invalid cond JSON" }, { status: 400 });
+    }
+    if (Array.isArray(parsed)) {
+      condRows = parsed.slice(0, MAX_COND_ROWS) as ProRowWire[];
+      hasPro = condRows.some(
+        (r) => r != null && typeof r === "object" && ((r as { kind?: unknown }).kind === "expr" || (r as { kind?: unknown }).kind === "pattern")
+      );
+    } else if (isV3Payload(parsed)) {
+      // v3 — sentence-style scan builder (registry-whitelisted vectorised evaluator).
+      // Errors here are evaluation problems, NOT JSON problems — surface the real
+      // message instead of letting the outer catch mask it as "Invalid cond JSON".
+      try {
+        return await runScanV3(parsed, url, sort, dir, page, perPage);
+      } catch (e) {
+        console.error("[/api/stocks] v3 scan failed:", e);
+        return NextResponse.json(
+          { error: `Scan failed: ${e instanceof Error ? e.message : "unknown error"}` },
+          { status: 500 },
+        );
+      }
+    } else if (isV2Payload(parsed)) {
+      condRows = (parsed.rows as ProRowWire[]).slice(0, MAX_COND_ROWS);
+      const rawBase = (parsed as { base?: unknown }).base;
+      baseRows = Array.isArray(rawBase) ? (rawBase as ProRowWire[]).slice(0, 10) : [];
+      semantics = "v2";
+      hasPro = condRows.length > 0 || baseRows.length > 0;
     }
   }
 

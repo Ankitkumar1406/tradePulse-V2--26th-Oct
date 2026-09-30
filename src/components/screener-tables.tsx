@@ -9,8 +9,8 @@ import { changeColor, fmtMcap, fmtNum, fmtPct, fmtPrice, fmtVol } from "@/lib/fo
 import { cn } from "@/lib/utils";
 
 /** Shared result-table / CSV / formatting layer for the Screener tab — used
- *  by Quick filters (screener-tab) and the condition builder
- *  (condition-builder) so both render identical result grids. */
+ *  by Quick filters (screener-tab) and the sentence-style scan builder
+ *  (scan-builder) so both render identical result grids. */
 
 export interface StockRow {
   symbol: string; name: string; price: number | null; changePct: number | null;
