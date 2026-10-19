@@ -5,6 +5,7 @@
  */
 import { db } from "@/lib/db";
 import { fetchChart } from "@/lib/yahoo";
+import { isSessionFinal } from "@/lib/bar-sync";
 
 const g = globalThis as unknown as {
   __histInFlight?: Set<string>;
@@ -52,14 +53,18 @@ export async function ensureHistory(symbol: string, maxAgeMin = 30): Promise<{ r
     const chart = await withGate(() => fetchChart(symbol, "2y"));
     const q = chart.indicators.quote[0];
     const byDate = new Map<string, { symbol: string; date: string; open: number; high: number; low: number; close: number; volume: number }>();
+    const today = istDate(new Date());
     for (let i = 0; i < chart.timestamp.length; i++) {
       const o = q.open[i], h = q.high[i], l = q.low[i], c = q.close[i], v = q.volume[i];
       if (o == null || h == null || l == null || c == null) continue;
-      byDate.set(istDate(new Date(chart.timestamp[i] * 1000)), {
-        symbol,
-        date: istDate(new Date(chart.timestamp[i] * 1000)),
-        open: o, high: h, low: l, close: c, volume: v ?? 0,
-      });
+      const date = istDate(new Date(chart.timestamp[i] * 1000));
+      // Same rule as the managed sync (bar-sync.ts): today's candle is intraday
+      // partial until 15:45 IST — never store it, or chart views would poison
+      // DailyBar with a half-day bar while the screener runs on the last
+      // completed session. It re-enters via the 4 pm IST EOD fire.
+      if (date === today && !isSessionFinal()) continue;
+      if (o <= 0 || c <= 0) continue; // placeholder/zero-price rows + non-traded iNAV series
+      byDate.set(date, { symbol, date, open: o, high: h, low: l, close: c, volume: v ?? 0 });
     }
     const rows = [...byDate.values()];
     if (rows.length > 0) {

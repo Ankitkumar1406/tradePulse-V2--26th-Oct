@@ -176,7 +176,7 @@ export function chartToRows(symbol: string, chart: Awaited<ReturnType<typeof fet
   for (let i = 0; i < ts.length; i++) {
     const o = q.open[i], h = q.high[i], l = q.low[i], c = q.close[i], v = q.volume[i];
     if (o == null || h == null || l == null || c == null) continue;
-    if (c <= 0 || h <= 0 || l <= 0) continue; // Yahoo occasionally emits all-zero placeholder rows for dead instruments
+    if (c <= 0 || h <= 0 || l <= 0 || o <= 0) continue; // all-zero placeholders + non-traded iNAV series (valid close, open=0/vol=0)
     const date = new Date(ts[i] * 1000).toISOString().slice(0, 10);
     if (date === todayIso && !sessionFinal) continue; // intraday partial candle
     rows.push({
