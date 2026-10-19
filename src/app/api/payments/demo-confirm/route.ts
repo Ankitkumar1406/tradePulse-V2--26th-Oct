@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     );
   }
   const session = await getServerSession(authOptions);
-  if (!session?.user?.uid) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const payment = await db.payment.findUnique({ where: { orderId } });
-  if (!payment || payment.userId !== session.user.uid) {
+  if (!payment || payment.userId !== session.user.id) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
   if (payment.provider !== "demo") {

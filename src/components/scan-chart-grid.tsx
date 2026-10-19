@@ -16,7 +16,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Loader2, Star } from "lucide-react";
-import type { Bar } from "@/components/candle-chart";
+import type { Candle as Bar } from "@/components/candle-chart";
 import { fmtPct, changeColor } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -118,7 +118,7 @@ function BananaChart({ bars, height, piv }: { bars: Bar[]; height: number; piv: 
     const candleW = Math.max(1.2, Math.min(7, stepX * 0.62));
     const x = (i: number) => PAD.left + i * stepX + stepX / 2;
     const y = (p: number) => PAD.top + ((yHi - p) / (yHi - yLo)) * plotH;
-    const vy = (v: number) => volTop + volH - (v / Math.max(...bars.map((b) => b.volume), 1)) * volH;
+    const vy = (v: number) => volTop + volH - (v / Math.max(...bars.map((b) => b.volume ?? 0), 1)) * volH;
 
     const steps = 4;
     const yTicks = Array.from({ length: steps + 1 }, (_, i) => {
@@ -167,9 +167,9 @@ function BananaChart({ bars, height, piv }: { bars: Bar[]; height: number; piv: 
           <rect
             key={`v${i}`}
             x={geo.x(i) - geo.candleW / 2}
-            y={geo.vy(b.volume)}
+            y={geo.vy(b.volume ?? 0)}
             width={geo.candleW}
-            height={Math.max(0.5, geo.volTop + geo.volH - geo.vy(b.volume))}
+            height={Math.max(0.5, geo.volTop + geo.volH - geo.vy(b.volume ?? 0))}
             fill={b.close >= b.open ? "#10b98140" : "#ef444440"}
           />
         ))}
@@ -232,7 +232,7 @@ function BananaChart({ bars, height, piv }: { bars: Bar[]; height: number; piv: 
           <span className="text-zinc-400">{hoverBar.date}</span>{" "}
           O {fmtAxis(hoverBar.open)} H {fmtAxis(hoverBar.high)} L {fmtAxis(hoverBar.low)}{" "}
           <span className={hoverBar.close >= (prevClose ?? hoverBar.open) ? "text-emerald-400" : "text-red-400"}>C {fmtAxis(hoverBar.close)}</span>{" "}
-          V {fmtVolM(hoverBar.volume)}
+          V {fmtVolM(hoverBar.volume ?? 0)}
         </div>
       )}
     </div>
@@ -331,7 +331,7 @@ function ScanChartCard({ row, result, range, onSelectStock }: {
 
       {/* vol + rs */}
       <div className="mt-0.5 font-mono text-[11px] text-zinc-400">
-        {last ? <>Vol {fmtVolM(last.volume)}</> : "Vol —"}
+        {last ? <>Vol {fmtVolM(last.volume ?? 0)}</> : "Vol —"}
         {row.rsRank != null ? <>{"  "}RS <span className="text-zinc-200">{row.rsRank}</span></> : null}
         {metricBits.length > 0 && <span className="text-zinc-500">  ·  {metricBits[0]}</span>}
       </div>

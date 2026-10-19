@@ -12,6 +12,9 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # is the last writer before the server starts: always restore the PostgreSQL
 # datasource here. The userspace PG cluster lives under ./pgdata (scripts/pg-ensure.sh).
 PG_URL="postgresql://tradepulse:tradepulse@127.0.0.1:5432/tradepulse?connection_limit=8&pool_timeout=30"
+# Stable auth secret — a public/rotating secret would invalidate sessions and
+# (with the repo fallback) let anyone forge session JWTs.
+NEXTAUTH_SECRET="c0d83c55a659cc90766942fb2f940d466a4ce5b74fa125b07d65e8e899e0e9f1"
 
 log_step_start() {
         local step_name="$1"
@@ -132,7 +135,9 @@ log_step_start "Fix datasource"
 # processes (prisma, next, ops scripts) all see the same value even if .env
 # loading changes.
 echo "DATABASE_URL=${PG_URL}" > "$PROJECT_DIR/.env"
+echo "NEXTAUTH_SECRET=${NEXTAUTH_SECRET}" >> "$PROJECT_DIR/.env"
 export DATABASE_URL="${PG_URL}"
+export NEXTAUTH_SECRET="${NEXTAUTH_SECRET}"
 chown z:z "$PROJECT_DIR/.env" 2>/dev/null || true
 echo "[DB] .env restored to PostgreSQL userspace cluster (pgdata/)"
 log_step_end "Fix datasource"

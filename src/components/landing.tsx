@@ -175,7 +175,7 @@ function HeroChip({ icon, title, sub }: { icon: React.ReactNode; title: string; 
 
 const FEATURES = [
   { icon: ScanSearch, title: `${TOTAL_SCANS} one-click scanners`, text: `A pro-grade EOD suite across ${TOTAL_CATEGORIES} categories — chart patterns, shakeouts, gaps & earnings, volume, relative strength, the multi-timeframe RSI extra and all seven Trader Choice templates. Every result carries MarketSmith-style RS rating, EPS score & A/D rating — sort by RS, change %, market cap or 1M/3M/6M performance and star the best charts straight into your watchlist. Every scan returns every matching stock on the exchange — full results, never a truncated top-N sample.` },
-  { icon: SlidersHorizontal, title: "Chartink-style condition builder", text: "Stack up to 50 condition rows with AND/OR groups — daily or weekly series, RSI & MACD, SMA or EMA at any length, Bollinger Bands, bars-ago offsets, crosses and percent windows. Run up to 8 scans together for confluence, save your screens, export to CSV." },
+  { icon: SlidersHorizontal, title: "Pro screener & multi-scan confluence", text: "Quick filters across price, valuation, momentum, volume and technicals — then run up to 8 scans together and rank stocks by how many they fire on. Save your screens for one-click re-runs and export any result table to CSV." },
   { icon: BarChart3, title: "Market breadth & sector rotation", text: "A-D line, new highs vs new lows, participation above every key average, sector breadth grid, the RS × momentum rotation quadrant and sector strength — know the market's real mood in one glance before you plan the next session." },
   { icon: TrendingUp, title: "Sector momentum, three timeframes", text: "Daily, weekly and monthly RSI for every index and sector — spot high-strength rotations early and avoid sectors that only look strong on the daily chart." },
   { icon: Target, title: "Watchlists & smart price alerts", text: "Star stocks from any scan, screener result or chart tile into a dedicated watchlist with entry, stop and target levels — then let smart price alerts do the monitoring for you." },
@@ -267,9 +267,9 @@ const SCREENS: {
   {
     slug: "screener",
     eyebrow: "Screener",
-    title: "A Chartink-style builder that thinks in AND / OR",
-    text: "Stack up to 50 condition rows across price, valuation, momentum, volume and technicals — daily or weekly series, RSI and MACD, SMA or EMA at any length, Bollinger Bands, bars-ago offsets and crosses. Chain them with AND/OR branches, load a ready preset, save the screen for later and export the table to CSV. Or fire up to 8 scans at once and rank stocks by how many they confluence on.",
-    points: ["Up to 50 rows joined by AND/OR groups", "Daily & weekly series · bars-ago offsets · crosses & percent windows", "Multi-scan confluence, saved screens & CSV export"],
+    title: "A pro screener built for confluence",
+    text: "Filter all 3,500+ NSE stocks by price, valuation, momentum, volume and technicals in seconds — then fire up to 8 ready-made scans at once and rank stocks by how many they confluence on. Load a saved screen in one click, re-run it any day and export the table to CSV.",
+    points: ["Quick filters across price, momentum, volume & valuation", "Multi-scan confluence — up to 8 scans at once", "Saved screens, one-click re-runs & CSV export"],
   },
   {
     slug: "chart",
@@ -1241,8 +1241,10 @@ function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
 
 function DemoButton({ onSuccess }: { onSuccess: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
     <div className="mt-4 border-t border-zinc-800/80 pt-4">
+      {error && <p className="mb-2 text-center text-xs text-loss">{error}</p>}
       <Button
         type="button"
         variant="outline"
@@ -1250,8 +1252,14 @@ function DemoButton({ onSuccess }: { onSuccess: () => void }) {
         onClick={async () => {
           setBusy(true);
           try {
-            await signIn("credentials", { demo: "1", redirect: false });
+            const res = await signIn("credentials", { demo: "1", redirect: false });
+            if (res?.error) {
+              setError("Demo login failed — please try again");
+              return;
+            }
             onSuccess();
+          } catch {
+            setError("Something went wrong — try again");
           } finally {
             setBusy(false);
           }

@@ -7,15 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Bookmark, BookmarkPlus, ChevronDown, Layers, Radar, Search, SlidersHorizontal, Star, Trash2, X,
+  Bookmark, BookmarkPlus, ChevronDown, Layers, Radar, Search, Star, Trash2, X,
 } from "lucide-react";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist";
-import {
-  ScanBuilder,
-  type BuilderInitial,
-  type BuilderStateInfo,
-  type UniverseState,
-} from "@/components/scan-builder/scan-builder";
 import {
   Pager,
   ResultsTable,
@@ -63,13 +57,12 @@ function ScreenerUpgradePanel({ onUpgrade }: { onUpgrade?: () => void }) {
       </span>
       <h2 className="mt-4 text-lg font-bold tracking-tight text-zinc-50">The Screener is part of TradePulse Pro</h2>
       <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-zinc-500">
-        Screen all 3,551 NSE stocks with the visual condition builder, run several scans together for
+        Screen all 3,551 NSE stocks with pro-grade quick filters, run several scans together for
         confluence, save your screens and export the results.
       </p>
       <ul className="mx-auto mt-5 max-w-sm space-y-1.5 text-left text-xs text-zinc-400">
         {[
           "Full-universe filters — search, sector, sort & paginate",
-          "Condition builder — up to 50 rows with Chartink-style pro logic: searchable fields, Daily/Weekly timeframes, bars-ago offsets, sma / highest / lowest, crosses & percent windows, AND/OR groups",
           "Multi-scan confluence — run scans together, see which stocks fire in several",
           "Saved screens — update in place or save as new, re-run in one click",
           "CSV export for every result table",
@@ -102,7 +95,7 @@ export function ScreenerTab({
   initialSector?: string;
 }) {
   const qc = useQueryClient();
-  const [mode, setMode] = useState<"filters" | "builder" | "multi">("filters");
+  const [mode, setMode] = useState<"filters" | "multi">("filters");
 
   // ------------------------------------------------------------ saved screens
   const [savedOpen, setSavedOpen] = useState(false);
@@ -161,13 +154,6 @@ export function ScreenerTab({
     placeholderData: keepPreviousData,
     enabled: isPro,
   });
-
-  // ------------------------------------------------------------ builder mode
-  // The builder owns its rows/queries; the parent tracks what's loaded and
-  // whether it drifted, and hands saved screens over via a keyed remount.
-  const [builderLoad, setBuilderLoad] = useState<(BuilderInitial & { nonce: number }) | null>(null);
-  const [builderState, setBuilderState] = useState<BuilderStateInfo | null>(null);
-  const loadNonce = useRef(0);
 
   // ------------------------------------------------------------ multi mode
   const [catalog, setCatalog] = useState<ScanGroup[] | null>(null);
@@ -236,7 +222,6 @@ export function ScreenerTab({
       return;
     }
     // Quick filters snapshot search/sector/sort/direction; multi snapshots the scan set.
-    // (The condition builder saves itself — Update / Save-as-new live in its toolbar.)
     const kind = mode === "multi" ? "multi" : "filters";
     const definition = kind === "multi" ? { ids: sel, min: minMatch } : { q, sector, sort, dir };
     setSaving(true);
@@ -256,42 +241,6 @@ export function ScreenerTab({
       toast({ title: e instanceof Error ? e.message : "Save failed", variant: "destructive" });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const saveBuilderNew = async (name: string, definition: unknown): Promise<string | null> => {
-    try {
-      const res = await fetch("/api/screens", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, kind: "conditions", definition }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Save failed");
-      await qc.invalidateQueries({ queryKey: ["screens"] });
-      toast({ title: "Screen saved", description: `“${name}” is in your Saved screens.` });
-      return (data?.screen?.id as string) ?? null;
-    } catch (e) {
-      toast({ title: e instanceof Error ? e.message : "Save failed", variant: "destructive" });
-      return null;
-    }
-  };
-
-  const updateBuilder = async (id: string, name: string, definition: unknown): Promise<boolean> => {
-    try {
-      const res = await fetch("/api/screens", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, name, definition }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Update failed");
-      await qc.invalidateQueries({ queryKey: ["screens"] });
-      toast({ title: "Screen updated", description: `“${name}” now runs these conditions.` });
-      return true;
-    } catch (e) {
-      toast({ title: e instanceof Error ? e.message : "Update failed", variant: "destructive" });
-      return false;
     }
   };
 
@@ -315,23 +264,13 @@ export function ScreenerTab({
         ids?: string[];
         min?: number;
         q?: unknown; sector?: unknown; sort?: unknown; dir?: unknown;
-        uni?: Partial<UniverseState>;
       };
       if (s.kind === "conditions") {
-        // v3 definitions load natively; v2 / legacy rows and Chartink-style text
-        // convert best-effort inside the new builder (defToScan).
-        const uni: UniverseState | undefined = def.uni
-          ? {
-              universe: def.uni.universe === "n50" || def.uni.universe === "n500" || def.uni.universe === "fno" ? def.uni.universe : "all",
-              minPrice: typeof def.uni.minPrice === "string" ? def.uni.minPrice : "",
-              minMcapCr: typeof def.uni.minMcapCr === "string" ? def.uni.minMcapCr : "",
-              minTurnoverCr: typeof def.uni.minTurnoverCr === "string" ? def.uni.minTurnoverCr : "",
-            }
-          : undefined;
-        const payload = s.kind === "conditions" && def.v === 3 ? def.scan : def;
-        loadNonce.current += 1;
-        setBuilderLoad({ def: payload, name: s.name, screenId: s.id, baselineWire: def.v === 3 ? undefined : JSON.stringify(def), nonce: loadNonce.current, uni });
-        setMode("builder");
+        // Condition builder is parked for launch — saved condition screens open
+        // once it ships. Nothing else to do here.
+        toast({ title: "Condition builder is launching soon", description: `“${s.name}” will open here once the builder ships.` });
+        setSavedOpen(false);
+        return;
       } else if (s.kind === "multi" && Array.isArray(def.ids)) {
         setSel(def.ids.slice(0, 8));
         setMinMatch(Math.max(2, def.min ?? 2));
@@ -386,18 +325,6 @@ export function ScreenerTab({
   const activeCount = data?.total ?? 0;
   const headerCount =
     mode === "filters" ? (data ? `${activeCount.toLocaleString("en-IN")} matches` : "Screener")
-    : mode === "builder" ? (
-      builderState?.name ? (
-        <span className="flex items-center gap-2">
-          Editing: {builderState.name}
-          {builderState.dirty && (
-            <span className="inline-block h-2 w-2 rounded-full bg-gold" title="Unsaved changes" />
-          )}
-        </span>
-      ) : (
-        "Condition builder"
-      )
-    )
     : (multi ? `${multi.total.toLocaleString("en-IN")} confluence matches` : "Multi-scan confluence");
 
   return (
@@ -434,7 +361,7 @@ export function ScreenerTab({
                 {filteredSaved.length === 0 ? (
                   <p className="px-3 py-4 text-center text-[11px] text-zinc-500">
                     {(saved ?? []).length === 0
-                      ? "No saved views yet — set up quick filters, conditions or scans, then save."
+                      ? "No saved views yet — set up quick filters or scans, then save."
                       : `Nothing matches “${savedSearch}”.`}
                   </p>
                 ) : (
@@ -443,7 +370,7 @@ export function ScreenerTab({
                       <button onClick={() => loadScreen(s)} className="min-w-0 flex-1 text-left">
                         <span className="block truncate text-xs font-medium text-zinc-100">{s.name}</span>
                         <span className="block text-[10px] text-zinc-500">
-                          {s.kind === "multi" ? "Multi-scan set" : s.kind === "filters" ? "Quick-filter view" : "Condition screen"}
+                          {s.kind === "multi" ? "Multi-scan set" : s.kind === "filters" ? "Quick-filter view" : "Condition screen (launching soon)"}
                         </span>
                       </button>
                       <button
@@ -490,7 +417,7 @@ export function ScreenerTab({
                   ])
                 );
               } else {
-                toast({ title: "Use Export inside the condition builder" });
+                toast({ title: "Nothing to export yet" });
                 return;
               }
               toast({ title: "CSV exported" });
@@ -520,7 +447,6 @@ export function ScreenerTab({
       <div className="flex w-fit items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1">
         {([
           { id: "filters", label: "Quick filters", icon: Search },
-          { id: "builder", label: "Condition builder", icon: SlidersHorizontal },
           { id: "multi", label: "Multi-scan", icon: Layers },
         ] as const).map((m) => (
           <button
@@ -583,19 +509,6 @@ export function ScreenerTab({
             <Pager page={page} totalPages={totalPages(data.total, data.perPage)} onPage={setPage} />
           )}
         </>
-      )}
-
-      {/* ------------------------------------------------ builder mode */}
-      {mode === "builder" && (
-        <ScanBuilder
-          key={builderLoad?.nonce ?? "fresh"}
-          initial={builderLoad}
-          sectors={data?.sectors ?? []}
-          onSelectStock={onSelectStock}
-          onStateChange={setBuilderState}
-          onSaveNew={saveBuilderNew}
-          onUpdate={updateBuilder}
-        />
       )}
 
       {/* ------------------------------------------------ multi-scan mode */}

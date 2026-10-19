@@ -38,6 +38,11 @@ export async function markPaidAndActivate(paymentId: string): Promise<{ expiresA
   return { expiresAt, cycle };
 }
 
+/** Record a failed authorization/debit so order history reflects it. */
+export async function markFailed(paymentId: string): Promise<void> {
+  await db.payment.update({ where: { id: paymentId }, data: { status: "FAILED" } });
+}
+
 /**
  * Autopay renewal pass — runs hourly (scheduler) and after the 4 pm EOD fire.
  * For every Pro user with an active mandate (autoRenew) whose paid period has
