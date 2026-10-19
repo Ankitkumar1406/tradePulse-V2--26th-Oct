@@ -15,12 +15,12 @@ import { startSectorTrickle, startBarsTrickle, startEarningsTrickle, startFinanc
 import { nextAutoUpdateIso } from "@/lib/scheduler";
 import { recomputeRatings } from "@/lib/ratings";
 import { runPostSyncPipeline } from "@/lib/pipeline";
+import { lastSessionCloseInstant, isSessionFinal, istDateIso } from "@/lib/bar-sync";
 
 export const STALE_DATA_MS = 20 * 3600 * 1000;
 
 /** Skip the quote (universe) phase on refresh/daily when the last snapshot is younger than this. */
 export const UNIVERSE_FRESH_SKIP_MS = 2 * 3600 * 1000;
-
 /**
  * Hard gate: a new ingest cannot start within this window after the previous
  * successful one — Refresh clicks and page visits can never stack syncs or
@@ -36,6 +36,19 @@ async function universeFreshMs(): Promise<number> {
   const last = agg._max.universeSynced;
   if (!last) return Infinity;
   return Date.now() - last.getTime();
+}
+
+/** Names whose universe row was never (or not recently) re-stamped. A
+ *  partially-completed universe pass — crashed server, rate-limited pages —
+ *  bumps max(universeSynced) while the tail of the universe keeps days-old
+ *  quotes; max-timestamp freshness alone would skip them until the next
+ *  session. */
+const UNIVERSE_STALE_TOLERANCE = 50;
+async function staleUniverseCount(): Promise<number> {
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000);
+  return db.stock.count({
+    where: { OR: [{ universeSynced: null }, { universeSynced: { lt: cutoff } }] },
+  });
 }
 
 export type SyncMode = "full" | "refresh" | "daily";
@@ -92,10 +105,21 @@ async function runSync(mode: SyncMode) {
       // refresh / daily: quotes first (unless the universe snapshot is still
       // fresh — the symbol list barely moves intraday and re-fetching all
       // 3,548 quotes every refresh was pure waste), then refresh stale closes.
-      const skipUniverse = await universeFreshMs() > UNIVERSE_FRESH_SKIP_MS;
+      //
+      // ⚠️ This comparison was INVERTED for weeks ("age > skip" instead of
+      // "age < skip"): the universe phase skipped precisely when the data was
+      // STALE, so after any 2-hour window the quotes froze forever — prices,
+      // quoteTime, and everything derived from them (banner stamp, metrics
+      // session date, scans) went stale while bars kept flowing.
+      const universeAgeMs = await universeFreshMs();
+      const staleNames = await staleUniverseCount();
+      const skipUniverse = universeAgeMs < UNIVERSE_FRESH_SKIP_MS && staleNames < UNIVERSE_STALE_TOLERANCE;
       if (skipUniverse) {
         console.log("[sync] universe snapshot fresh — skipping quote re-fetch");
       } else {
+        console.log(
+          `[sync] universe stale (${(universeAgeMs / 3600000).toFixed(1)}h old, ${staleNames} names behind) — refreshing quotes`
+        );
         await runUniversePhase().catch((e) => console.error("[sync] universe phase:", e.message));
       }
       await runClosesPhase().catch((e) => console.error("[sync] closes phase:", e.message));
@@ -221,11 +245,17 @@ async function runUniversePhase() {
 
 /** Refresh closes/indicators for stale (or, with an explicit cutoff, all) stocks.
  *  Exported so ops scripts can run the phase standalone — keeps the heavy
- *  spark fetch loop out of the dev-server process (OOM precedent). */
+ *  spark fetch loop out of the dev-server process (OOM precedent).
+ *
+ *  Session-aware staleness: a stock is stale when its indicator snapshot
+ *  predates the most recent session close (15:30 IST) — not when a fixed
+ *  20-hour wall-clock window has passed. A sync at 4:05 pm IST therefore
+ *  always refreshes everything that closed with today's session, while a
+ *  late-evening manual refresh doesn't mask the next evening's EOD run. */
 export async function runClosesPhase(opts?: { staleCutoff?: Date }) {
   await db.syncState.updateMany({ where: { id: "main" }, data: { phase: "closes", status: "running" } });
 
-  const staleCutoff = opts?.staleCutoff ?? new Date(Date.now() - STALE_DATA_MS);
+  const staleCutoff = opts?.staleCutoff ?? lastSessionCloseInstant();
   const where =
     opts?.staleCutoff == null
       ? { price: { not: null } }
@@ -279,9 +309,20 @@ function buildSparkUpdate(
   spark: SparkPoint
 ): Record<string, unknown> | null {
   const series: [number, number][] = [];
+  // Partial-session guard (mirrors chartToRows): a spark fetched during
+  // market hours ends with today's half-formed close. Indicators computed on
+  // it would freeze an intraday snapshot into Stock (rsi/sma/momentum and
+  // the mini-chart series) for the whole day — drop today's point until the
+  // session is final.
+  const todayIso = istDateIso();
+  const sessionFinal = isSessionFinal();
   for (let i = 0; i < spark.timestamp.length; i++) {
     const c = spark.close[i];
-    if (c != null && Number.isFinite(c)) series.push([spark.timestamp[i], c]);
+    if (c != null && Number.isFinite(c)) {
+      const tsIso = new Date(spark.timestamp[i] * 1000).toISOString().slice(0, 10);
+      if (tsIso === todayIso && !sessionFinal) continue;
+      series.push([spark.timestamp[i], c]);
+    }
   }
   if (series.length < 2) return null; // no usable series at all — computeIndicators null-safe below handles short histories (recent IPOs)
 

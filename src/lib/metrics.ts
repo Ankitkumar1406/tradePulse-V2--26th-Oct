@@ -64,6 +64,37 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
       return { ok: false, date, rows: 0, reason: `bars-incomplete (${sessionRows}/${MIN_SESSION_ROWS})` };
     }
 
+    // Partial-session guard (two more signals on top of the raw row count):
+    //
+    // 1. Coverage — the day's rows must cover ≥90% of the symbols that traded
+    //    in the surrounding 10-day window. The raw count alone cannot tell
+    //    2,800 complete EOD rows from 2,767 rows written mid-session while
+    //    hundreds of names were still missing.
+    // 2. No bars trickle in flight — the trickle walks the universe by market
+    //    cap, so large-cap gates pass while micro-caps are still landing.
+    //    Freezing metrics mid-trickle would lock a partial universe in for
+    //    the day ("already-computed" blocks any re-run).
+    const trickleRunning = Boolean(
+      (globalThis as unknown as { __tpBarsTrickle?: boolean }).__tpBarsTrickle
+    );
+    if (trickleRunning && !opts?.force) {
+      return { ok: false, date, rows: 0, reason: "bars-trickle-running" };
+    }
+    const winStart = new Date(Date.parse(`${date}T00:00:00Z`) - 10 * 86400_000).toISOString().slice(0, 10);
+    const activeSymbols = await db.dailyBar.groupBy({
+      by: ["symbol"],
+      where: { date: { gte: winStart, lte: date } },
+    });
+    const minCoverage = Math.floor(activeSymbols.length * 0.9);
+    if (sessionRows < minCoverage) {
+      return {
+        ok: false,
+        date,
+        rows: 0,
+        reason: `bars-coverage (${sessionRows}/${activeSymbols.length} active symbols, need ${minCoverage})`,
+      };
+    }
+
     // ~380 calendar days ≈ 253 trading sessions — covers the deepest lookback
     // (252-session momentum / 52-week window) with margin.
     const cutoff = new Date(Date.parse(`${date}T00:00:00Z`) - 380 * 86400_000).toISOString().slice(0, 10);
@@ -90,7 +121,7 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
       const chunk = stocks.slice(i, i + CHUNK);
       const symbols = chunk.map((s) => s.symbol);
       const bars = await db.dailyBar.findMany({
-        where: { symbol: { in: symbols }, date: { gte: cutoff } },
+        where: { symbol: { in: symbols }, date: { gte: cutoff, lte: date } },
         orderBy: [{ symbol: "asc" }, { date: "asc" }],
         select: { symbol: true, date: true, open: true, high: true, low: true, close: true, volume: true },
       });
@@ -110,7 +141,7 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
         const n = list.length;
         const closes = list.map((r) => r.close);
         const close = closes[n - 1];
-        if (!Number.isFinite(close)) continue;
+        if (!Number.isFinite(close) || close <= 0) continue;
 
         const ind = computeIndicators(closes);
         const series: [number, number][] = list.map((r) => [Date.parse(`${r.date}T00:00:00Z`) / 1000, r.close]);

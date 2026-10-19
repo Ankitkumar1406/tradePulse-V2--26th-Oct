@@ -108,7 +108,18 @@ function arm(next?: Date) {
     void (async () => {
       try {
         console.log(`[scheduler] firing daily EOD sync at ${new Date().toISOString()}`);
-        await startSync("daily");
+        // force:true — this IS the EOD run of record. Without it, any manual
+        // refresh inside the previous 4 hours would trip the SYNC_MIN_INTERVAL
+        // gate and silently cancel the day's only universe+closes update.
+        const res = await startSync("daily", { force: true });
+        if (!res.started && res.reason === "already-running") {
+          // a long-running manual sync held the single-flight — retry once
+          // instead of losing the trading day's EOD update entirely.
+          console.log("[scheduler] daily fire blocked by a running sync — retrying in 15 min");
+          setTimeout(() => {
+            void startSync("daily", { force: true }).catch(() => {});
+          }, 15 * 60 * 1000);
+        }
         await processDueRenewals().catch(() => {});
       } catch (e) {
         console.error("[scheduler] daily fire failed:", e instanceof Error ? e.message : e);
@@ -171,7 +182,12 @@ export function startDailySyncScheduler() {
           db.stock.aggregate({ _max: { quoteTime: true } }),
           db.syncState.findUnique({ where: { id: "main" } }),
         ]);
-        if (shouldCatchUp(new Date(), agg._max.quoteTime, state?.startedAt ?? null)) {
+        // Key the catch-up on the last SUCCESSFUL ingest (lastIngestAt), not
+        // the last attempt (startedAt): a sync that started after the 4 pm
+        // boundary but failed — or skipped its universe phase — must not
+        // block a retry on the next boot.
+        const lastIngest = state?.lastIngestAt ?? state?.startedAt ?? null;
+        if (shouldCatchUp(new Date(), agg._max.quoteTime, lastIngest)) {
           console.log("[scheduler] catch-up daily update owed — firing now");
           await startSync("daily");
         } else {

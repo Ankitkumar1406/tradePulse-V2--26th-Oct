@@ -30,6 +30,75 @@ const SOFT_DEADLINE_MS = 4500;
 const EXP_TTL_MS = 60 * 1000;
 
 const IST_OFFSET_MIN = 330;
+/** Yahoo stamps the session close at ~15:30 IST; anything earlier is intraday. */
+const SESSION_QUOTE_MIN = 15 * 60 + 25;
+/** NSE closes 15:30, the closing auction prints until ~15:40 — a bar for the
+ *  current calendar day is only safe to store from 15:45 IST onwards. */
+const SESSION_BAR_FINAL_MIN = 15 * 60 + 45;
+
+/** Shift a UTC instant into IST (returned as a UTC-shifted Date — read its
+ *  UTC getters as IST wall-clock fields). */
+function istWall(now: Date): Date {
+  return new Date(now.getTime() + IST_OFFSET_MIN * 60 * 1000);
+}
+
+/** True once today's (IST) session is closed and its bars are final —
+ *  always true on weekends. Guards against storing intraday partial bars. */
+export function isSessionFinal(now: Date = new Date()): boolean {
+  const ist = istWall(now);
+  const dow = ist.getUTCDay();
+  if (dow === 0 || dow === 6) return true;
+  return ist.getUTCHours() * 60 + ist.getUTCMinutes() >= SESSION_BAR_FINAL_MIN;
+}
+
+/** IST calendar date (YYYY-MM-DD) for `now`. */
+export function istDateIso(now: Date = new Date()): string {
+  return istWall(now).toISOString().slice(0, 10);
+}
+
+let holidayCache: { dates: Set<string>; at: number } | null = null;
+
+async function nseHolidays(): Promise<Set<string>> {
+  if (holidayCache && Date.now() - holidayCache.at < 10 * 60 * 1000) return holidayCache.dates;
+  try {
+    const rows = await db.marketEvent.findMany({ where: { category: "holiday" }, select: { date: true } });
+    holidayCache = { dates: new Set(rows.map((r) => r.date)), at: Date.now() };
+  } catch {
+    holidayCache = { dates: new Set(), at: Date.now() };
+  }
+  return holidayCache.dates;
+}
+
+/** Step an IST calendar date back to the previous likely trading day —
+ *  skips weekends and seeded NSE holidays (best effort; falls back to
+ *  weekends-only when the calendar table is unavailable). */
+export async function prevSessionDateIso(dateIso: string): Promise<string> {
+  const holidays = await nseHolidays();
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  for (let i = 0; i < 20; i++) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    const iso = d.toISOString().slice(0, 10);
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6 && !holidays.has(iso)) return iso;
+  }
+  return dateIso;
+}
+
+/** Most recent Mon–Fri 15:30 IST instant at or before `now` (UTC Date).
+ *  "Has this table been refreshed since the last session closed?" cutoff —
+ *  deliberately calendar-blind to holidays: a holiday's 15:30 cutoff simply
+ *  over-covers, which is the safe direction for staleness checks. */
+export function lastSessionCloseInstant(now: Date = new Date()): Date {
+  const ist = istWall(now);
+  const cand = new Date(
+    Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate(), 15, 30, 0, 0) - IST_OFFSET_MIN * 60 * 1000
+  );
+  const out = cand.getTime() <= now.getTime() ? cand : new Date(cand.getTime() - 86400_000);
+  const dow = istWall(out).getUTCDay();
+  if (dow === 0) return new Date(out.getTime() - 2 * 86400_000);
+  if (dow === 6) return new Date(out.getTime() - 1 * 86400_000);
+  return out;
+}
 
 interface BarSyncGlobals {
   __tpBarSyncInFlight?: Map<string, Promise<void>>;
@@ -44,9 +113,14 @@ const FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
 let expDateCache: { date: string; at: number } | null = null;
 
 /**
- * Calendar date (YYYY-MM-DD, IST) of the newest quote snapshot in the
- * universe — i.e. the date "the data is updated till". Falls back to null
- * when the universe has never synced.
+ * Calendar date (YYYY-MM-DD, IST) of the newest COMPLETED EOD session the
+ * universe has synced — i.e. the date "the data is updated till". Falls back
+ * to null when the universe has never synced.
+ *
+ * Intraday guard: between 9:15 and 15:25 IST a manual refresh stamps
+ * quoteTime with a live intraday instant. Treating that calendar day as the
+ * latest EOD session would let metrics/scans freeze a partial-day snapshot
+ * for it, so an intraday quote clamps back to the previous trading day.
  */
 export async function expectedLatestBarDate(): Promise<string | null> {
   if (expDateCache && Date.now() - expDateCache.at < EXP_TTL_MS) return expDateCache.date;
@@ -55,15 +129,19 @@ export async function expectedLatestBarDate(): Promise<string | null> {
     const qt = agg._max.quoteTime;
     if (!qt) return null;
     // regularMarketTime is the UTC instant of the last NSE trade (~15:30 IST);
-    // shift to IST before taking the calendar date.
-    const ist = new Date(qt.getTime() + IST_OFFSET_MIN * 60 * 1000);
-    // Clamp to the last Mon–Fri: on weekends Yahoo can report a non-trading
-    // "last update" instant, and a Saturday/Sunday target date would make
-    // every Friday bar look stale → whole-universe re-fetch on every boot.
+    // shift to IST before reading the calendar fields.
+    const ist = istWall(qt);
+    let date = ist.toISOString().slice(0, 10);
     const dow = ist.getUTCDay();
-    if (dow === 0) ist.setUTCDate(ist.getUTCDate() - 2); // Sunday → Friday
-    else if (dow === 6) ist.setUTCDate(ist.getUTCDate() - 1); // Saturday → Friday
-    expDateCache = { date: ist.toISOString().slice(0, 10), at: Date.now() };
+    const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+    const intradayQuote = dow !== 0 && dow !== 6 && mins < SESSION_QUOTE_MIN;
+    if (intradayQuote || dow === 0 || dow === 6) {
+      // weekend / holiday-safe step back to the previous trading day — a
+      // Saturday/Sunday/holiday target would make every Friday bar look
+      // stale → whole-universe re-fetch on every boot.
+      date = await prevSessionDateIso(date);
+    }
+    expDateCache = { date, at: Date.now() };
     return expDateCache.date;
   } catch {
     return null;
@@ -80,17 +158,30 @@ export interface SymbolBarRow {
   volume: number;
 }
 
-/** Yahoo chart JSON -> bar rows (drops null OHLC points). */
+/**
+ * Yahoo chart JSON -> bar rows (drops null OHLC points).
+ *
+ * Partial-session guard: a chart fetched during market hours includes the
+ * CURRENT day's half-formed candle (a ~2-hour price with a fraction of the
+ * day's volume). Storing it would poison the EOD store — and because the
+ * bar's date then equals the expected session, the trickle would never
+ * re-fetch it. Drop the current day's row until the session is final.
+ */
 export function chartToRows(symbol: string, chart: Awaited<ReturnType<typeof fetchChart>>): SymbolBarRow[] {
   const ts = chart.timestamp;
   const q = chart.indicators.quote[0];
   const rows: SymbolBarRow[] = [];
+  const todayIso = istDateIso();
+  const sessionFinal = isSessionFinal();
   for (let i = 0; i < ts.length; i++) {
     const o = q.open[i], h = q.high[i], l = q.low[i], c = q.close[i], v = q.volume[i];
     if (o == null || h == null || l == null || c == null) continue;
+    if (c <= 0 || h <= 0 || l <= 0) continue; // Yahoo occasionally emits all-zero placeholder rows for dead instruments
+    const date = new Date(ts[i] * 1000).toISOString().slice(0, 10);
+    if (date === todayIso && !sessionFinal) continue; // intraday partial candle
     rows.push({
       symbol,
-      date: new Date(ts[i] * 1000).toISOString().slice(0, 10),
+      date,
       open: o, high: h, low: l, close: c,
       volume: v ?? 0,
     });
