@@ -141,6 +141,25 @@ export async function expectedLatestBarDate(): Promise<string | null> {
       // stale → whole-universe re-fetch on every boot.
       date = await prevSessionDateIso(date);
     }
+    // Zero-bars guard: an exchange holiday or special closure missing from
+    // the seeded MarketEvent calendar leaves the candidate date with no
+    // bars anywhere — the metrics pipeline then deadlocks forever on
+    // "bars-incomplete" (2026-10-20 Dussehra incident). If the candidate
+    // has zero bars while earlier sessions have thousands, trust the data
+    // and step back to the previous trading day. A real session that is
+    // mid-trickle always has SOME rows, so this only fires on genuinely
+    // empty dates (and the metrics coverage gates still protect accuracy).
+    const [candRows, maxBar] = await Promise.all([
+      db.dailyBar.count({ where: { date } }),
+      db.dailyBar.aggregate({ _max: { date: true } }),
+    ]);
+    if (candRows === 0 && maxBar._max.date && maxBar._max.date < date) {
+      for (let i = 0; i < 3; i++) {
+        date = await prevSessionDateIso(date);
+        const rows = await db.dailyBar.count({ where: { date } });
+        if (rows > 0) break;
+      }
+    }
     expDateCache = { date, at: Date.now() };
     return expDateCache.date;
   } catch {

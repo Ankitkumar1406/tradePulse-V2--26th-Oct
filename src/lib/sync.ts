@@ -23,12 +23,22 @@ export const STALE_DATA_MS = 20 * 3600 * 1000;
 export const UNIVERSE_FRESH_SKIP_MS = 2 * 3600 * 1000;
 /**
  * Hard gate: a new ingest cannot start within this window after the previous
- * successful one — Refresh clicks and page visits can never stack syncs or
- * re-trigger the whole pipeline. Only the scheduler's own 4 pm fire (which is
- * ≥ ~20h after the previous day's run) or an explicit admin force bypasses
+ * successful one — page visits and the scheduler can never stack syncs or
+ * re-trigger the whole pipeline. Only an explicit admin force bypasses
  * recent activity, and single-flight guards everything else.
  */
 export const SYNC_MIN_INTERVAL_MS = 4 * 3600 * 1000;
+
+/**
+ * Manual Refresh-button cooldown. The Refresh click is the user's only way
+ * to pull fresh quotes, so a 4-hour hard gate reads as "the button is
+ * broken" (silent `{ok:false, reason:"recent"}` rejections — 2026-10-21
+ * report). Manual refreshes now pass after a short anti-hammer cooldown:
+ * short enough that a click lands, long enough that a stuck button cannot
+ * hammer Yahoo or stack full-universe passes. Single-flight still guards
+ * overlapping runs, and admin force bypasses everything.
+ */
+export const MANUAL_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
 
 /** How long ago the universe snapshot was taken (max universeSynced), or Infinity when never synced. */
 async function universeFreshMs(): Promise<number> {
@@ -76,9 +86,13 @@ export async function startSync(
 
   // Hard gate — never start a sync when a successful one just ran, unless an
   // admin explicitly forces it. The initial full sync (empty universe) is
-  // always allowed.
+  // always allowed. Manual refreshes get the short anti-hammer cooldown; the
+  // scheduler/boot keep the 4h gate (their fire times are naturally ≥ ~20h
+  // apart, and the boot catch-up only fires when the data is already stale).
   const last = state?.lastIngestAt ?? null;
-  if (!opts?.force && stockCount > 0 && last && Date.now() - last.getTime() < SYNC_MIN_INTERVAL_MS) {
+  const minIntervalMs =
+    mode === "refresh" && !opts?.force ? MANUAL_REFRESH_COOLDOWN_MS : SYNC_MIN_INTERVAL_MS;
+  if (!opts?.force && stockCount > 0 && last && Date.now() - last.getTime() < minIntervalMs) {
     return { started: false, reason: "recent" };
   }
 
@@ -256,10 +270,15 @@ export async function runClosesPhase(opts?: { staleCutoff?: Date }) {
   await db.syncState.updateMany({ where: { id: "main" }, data: { phase: "closes", status: "running" } });
 
   const staleCutoff = opts?.staleCutoff ?? lastSessionCloseInstant();
+  // Explicit cutoff = forced ALL-stocks pass (recover-sync/backfill-closes
+  // pass `new Date()` for this). Plain call = session-aware stale-only: the
+  // 16:00 EOD fire still refreshes everything (yesterday's closesSynced
+  // predates the new 15:30 cutoff), but an intraday manual refresh skips the
+  // ~3.6k already-current spark fetches instead of re-pulling the universe.
   const where =
     opts?.staleCutoff == null
-      ? { price: { not: null } }
-      : { price: { not: null }, OR: [{ closesSynced: null }, { closesSynced: { lt: staleCutoff } }] };
+      ? { price: { not: null }, OR: [{ closesSynced: null }, { closesSynced: { lt: staleCutoff } }] }
+      : { price: { not: null } };
 
   const stocks = await db.stock.findMany({
     where,
