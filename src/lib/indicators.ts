@@ -397,34 +397,38 @@ export function ultimateOscillator(bars: Bar[]): number | null {
 /** Supertrend (10, 3×ATR). Returns the band value and direction (1 up / -1 down). */
 export function supertrend(bars: Bar[], period = 10, mult = 3): { value: number | null; dir: number | null } {
   if (bars.length < period + 2) return { value: null, dir: null };
-  // Wilder ATR series
+  // Wilder ATR series — atrs[i] is defined for i >= period
   const trs: number[] = [0];
   for (let i = 1; i < bars.length; i++) {
     trs.push(Math.max(bars[i].high - bars[i].low, Math.abs(bars[i].high - bars[i - 1].close), Math.abs(bars[i].low - bars[i - 1].close)));
   }
+  const atrs: number[] = new Array(bars.length).fill(NaN);
   let a = trs.slice(1, period + 1).reduce((x, v) => x + v, 0) / period;
-  const atrs: number[] = new Array(bars.length).fill(0);
+  atrs[period] = a;
   for (let i = period + 1; i < bars.length; i++) {
     a = (a * (period - 1) + trs[i]) / period;
     atrs[i] = a;
   }
-  atrs[period] = trs.slice(1, period + 1).reduce((x, v) => x + v, 0) / period;
 
-  let dir = 1;
-  let finalUpper = Infinity;
-  let finalLower = -Infinity;
-  for (let i = period; i < bars.length; i++) {
+  // Seed at the first indicator bar, then walk the standard band rules:
+  //   finalUpper = upper when it falls, or the prior close is above the band
+  //   finalLower = lower when it rises, or the prior close is below the band
+  const seedMid = (bars[period].high + bars[period].low) / 2;
+  let finalUpper = seedMid + mult * atrs[period];
+  let finalLower = seedMid - mult * atrs[period];
+  let dir = bars[period].close > seedMid ? 1 : -1;
+
+  for (let i = period + 1; i < bars.length; i++) {
     const mid = (bars[i].high + bars[i].low) / 2;
     const upper = mid + mult * atrs[i];
     const lower = mid - mult * atrs[i];
-    finalUpper = bars[i - 1].close > finalUpper || upper < finalUpper ? Math.max(upper, finalUpper) : upper;
-    finalLower = bars[i - 1].close < finalLower || lower > finalLower ? Math.min(lower, finalLower) : lower;
+    finalUpper = upper < finalUpper || bars[i - 1].close > finalUpper ? upper : finalUpper;
+    finalLower = lower > finalLower || bars[i - 1].close < finalLower ? lower : finalLower;
     if (dir === 1 && bars[i].close < finalLower) dir = -1;
     else if (dir === -1 && bars[i].close > finalUpper) dir = 1;
   }
-  const last = bars[bars.length - 1];
-  const mid = (last.high + last.low) / 2;
-  return { value: dir === 1 ? finalLower : finalUpper, dir, ...(Number.isFinite(mid) ? {} : {}) };
+  const value = dir === 1 ? finalLower : finalUpper;
+  return { value: Number.isFinite(value) ? value : null, dir };
 }
 
 /** Annualised volatility % — stdev of daily (or weekly) simple returns × √P. */

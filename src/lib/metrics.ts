@@ -33,14 +33,14 @@ const g = globalThis as unknown as MetricsGlobals;
 const CHUNK = 400; // symbols per chunk (bars query + bulk insert)
 const MIN_SESSION_ROWS = 800; // a "full" NSE session — below this the bars are still trickling
 
-// --- Nifty index closes for beta ------------------------------------------
+// --- Nifty index returns for beta -----------------------------------------
 // One ^NSEI chart fetch per metrics run, cached per session date. Beta needs
-// an aligned daily return series — null-safe: an index fetch failure only
-// blanks beta1Y, never blocks the metrics run.
-let indexCache: { date: string; byDate: Map<string, number> } | null = null;
+// an aligned daily RETURN series — the map holds date → index daily return.
+// Null-safe: an index fetch failure only blanks beta1Y, never blocks the run.
+let indexCache: { date: string; rets: Map<string, number> } | null = null;
 
-async function indexClosesByDate(sessionDate: string): Promise<Map<string, number>> {
-  if (indexCache && indexCache.date === sessionDate) return indexCache.byDate;
+async function indexReturnsByDate(sessionDate: string): Promise<Map<string, number>> {
+  if (indexCache && indexCache.date === sessionDate) return indexCache.rets;
   try {
     const chart = await fetchChart("^NSEI", "2y");
     const q = chart.indicators?.quote?.[0];
@@ -53,11 +53,18 @@ async function indexClosesByDate(sessionDate: string): Promise<Map<string, numbe
         byDate.set(new Date(ts[i] * 1000).toISOString().slice(0, 10), c);
       }
     }
-    indexCache = { date: sessionDate, byDate };
-    return byDate;
+    // daily returns from the ascending close series
+    const rets = new Map<string, number>();
+    let prevC: number | null = null;
+    for (const [d, c] of [...byDate.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1))) {
+      if (prevC != null && prevC > 0) rets.set(d, c / prevC - 1);
+      prevC = c;
+    }
+    indexCache = { date: sessionDate, rets };
+    return rets;
   } catch {
-    indexCache = { date: sessionDate, byDate: new Map() };
-    return indexCache.byDate;
+    indexCache = { date: sessionDate, rets: new Map() };
+    return indexCache.rets;
   }
 }
 
@@ -164,7 +171,7 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
       orderBy: descNullsLast("marketCap"),
     });
 
-    const idxByDate = await indexClosesByDate(date);
+    const idxRetsByDate = await indexReturnsByDate(date);
 
     // Rebuild the whole session atomically: wipe any partial run, then insert.
     await db.stockMetrics.deleteMany({ where: { date } });
@@ -268,11 +275,11 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
         const weekly = weeklyCloses(series);
         const volatW = weekly.length >= 9 ? volatility(weekly, 8, 52) : null;
         let beta1Y: number | null = null;
-        if (idxByDate.size > 0) {
+        if (idxRetsByDate.size > 0) {
           const symAligned: number[] = [];
           const idxRets: number[] = [];
           for (let i = 1; i < n; i++) {
-            const ir = idxByDate.get(list[i].date);
+            const ir = idxRetsByDate.get(list[i].date);
             if (ir != null && list[i - 1].close > 0) {
               symAligned.push(list[i].close / list[i - 1].close - 1);
               idxRets.push(ir);

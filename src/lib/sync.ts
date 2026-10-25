@@ -10,7 +10,6 @@
 import { db, descNullsLast } from "@/lib/db";
 import { fetchUniversePage, fetchSpark, type ScreenerQuote, type SparkPoint } from "@/lib/yahoo";
 import { computeIndicators, computeExtendedIndicators } from "@/lib/indicators";
-import { refreshBseQuotes } from "@/lib/bse";
 import { evaluateAlerts } from "@/lib/alerts";
 import { startSectorTrickle, startBarsTrickle, startEarningsTrickle, startFinancialsTrickle, startFundamentalsTrickle } from "@/lib/trickle";
 import { nextAutoUpdateIso } from "@/lib/scheduler";
@@ -258,11 +257,6 @@ async function upsertQuotes(quotes: ScreenerQuote[]) {
 async function runUniversePhase() {
   await db.syncState.updateMany({ where: { id: "main" }, data: { phase: "universe", status: "running" } });
   await runUniversePageLoop();
-  // BSE mirror (real .BO quotes; seeds itself on the first run, then just
-  // refreshes). A failure here must never fail the whole universe phase.
-  await refreshBseQuotes().catch((e) =>
-    console.error("[sync] bse quotes:", e instanceof Error ? e.message : e)
-  );
 }
 
 // ---------------------------------------------------------------- closes

@@ -1,0 +1,2206 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Screener · TradePulse</title>
+<style>
+/* ============================================================ TradePulse
+   Light is the DEFAULT theme (matches the main app). Dark is opt-in via
+   [data-theme="dark"] and mirrors the app's zinc-950 OLED palette. */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f8fa;            /* page canvas */
+  --panel: #ffffff;         /* cards, popups, table */
+  --border: #e4e7eb;        /* subtle borders */
+  --border-strong: #c6cbd1; /* strong borders */
+  --text: #1a1a1a;          /* headings / primary */
+  --text-body: #3a3e42;     /* body */
+  --text-2: #4a4a4a;        /* secondary */
+  --text-3: #6b7076;        /* muted */
+  --brand: #0b6e4f;         /* deep green CTA */
+  --brand-hover: #095c42;
+  --brand-soft: #0b6e4f14;  /* 8% tint */
+  --brand-text: #0b6e4f;
+  --gold: #d4a72c;
+  --gold-text: #8a6512;
+  --pos: #0b8043;           /* gains */
+  --neg: #c73a3a;           /* losses */
+  --pos-soft: #0b804314;
+  --neg-soft: #c73a3a12;
+  --muted-chip: #edf0f3;    /* secondary chips */
+  --hover: #f1f3f5;
+  --shadow: 0 8px 28px rgba(16, 24, 40, .12), 0 2px 6px rgba(16, 24, 40, .06);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, .08);
+  --scroll-thumb: #c6cbd1;
+  --logo-1: #e8f3ee; --logo-2: #f6efe0; --logo-3: #e7eef7; --logo-4: #f2e8f6; --logo-5: #f6e7e7;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #09090b;
+  --panel: #18181b;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --text: #fafafa;
+  --text-body: #d4d4d8;
+  --text-2: #a1a1aa;
+  --text-3: #71717a;
+  --brand: #10b981;
+  --brand-hover: #059669;
+  --brand-soft: #10b98122;
+  --brand-text: #34d399;
+  --gold: #d4a72c;
+  --gold-text: #e5c15c;
+  --pos: #0f9d58;
+  --neg: #e05c5c;
+  --pos-soft: #0f9d5822;
+  --neg-soft: #e05c5c22;
+  --muted-chip: #27272a;
+  --hover: #232327;
+  --shadow: 0 8px 28px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, .4);
+  --scroll-thumb: #3f3f46;
+  --logo-1: #14342a; --logo-2: #37301a; --logo-3: #1c2b3d; --logo-4: #301b38; --logo-5: #3a1d1d;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-body);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-feature-settings: "tnum" 0;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+input, select { font: inherit; color: var(--text); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ============================================================ top bar */
+.topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px 8px;
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand .mark {
+  width: 26px; height: 26px; border-radius: 8px;
+  background: var(--brand); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 13px; letter-spacing: -.5px;
+}
+.brand h1 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -.2px; }
+.brand .sub { font-size: 11px; color: var(--text-3); margin-left: 2px; }
+
+.mkt {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); background: var(--panel);
+  border-radius: 8px; padding: 0 8px; height: 30px;
+}
+.mkt select {
+  border: 0; background: transparent; outline: none; height: 28px;
+  font-weight: 600; font-size: 12.5px; color: var(--text); cursor: pointer;
+}
+.spacer { flex: 1 1 auto; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 11px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel); color: var(--text-2);
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.btn:hover { background: var(--hover); color: var(--text); }
+.btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.primary:hover { background: var(--brand-hover); border-color: var(--brand-hover); color: #fff; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--hover); }
+.btn.on { border-color: var(--brand); color: var(--brand-text); background: var(--brand-soft); }
+.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.menu-wrap { position: relative; }
+.menu {
+  position: absolute; right: 0; top: 34px; z-index: 60;
+  min-width: 240px; max-width: 320px; max-height: 420px; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 6px;
+}
+.menu .mi {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; text-align: left; padding: 7px 9px; border-radius: 7px;
+  color: var(--text-body); font-size: 12.5px;
+}
+.menu .mi:hover { background: var(--hover); }
+.menu .mi .t { font-weight: 600; color: var(--text); }
+.menu .mi .d { display: block; font-weight: 400; font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.menu .mi .x { color: var(--text-3); padding: 2px 4px; border-radius: 5px; }
+.menu .mi .x:hover { color: var(--neg); background: var(--neg-soft); }
+.menu .empty { padding: 14px 10px; text-align: center; color: var(--text-3); font-size: 12px; }
+.menu .sep { height: 1px; background: var(--border); margin: 5px 4px; }
+.menu .mhead { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 7px 9px 3px; }
+.menu input.search {
+  width: 100%; height: 28px; margin: 2px 0 6px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg);
+  outline: none; font-size: 12.5px;
+}
+.menu input.search:focus { border-color: var(--brand); }
+
+/* ============================================================ filter bar */
+.filterbar {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  padding: 2px 16px 10px; background: var(--bg);
+}
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 10px; max-width: 300px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel); color: var(--text-2); font-size: 12.5px; font-weight: 600;
+  white-space: nowrap; transition: border-color .12s, background .12s;
+}
+.pill:hover { border-color: var(--border-strong); }
+.pill.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-text); }
+.pill .name { font-weight: 600; }
+.pill .val { font-weight: 500; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.pill.active .val { color: var(--brand-text); }
+.pill .x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 4px; color: var(--text-3); font-size: 12px; line-height: 1;
+}
+.pill .x:hover { background: var(--neg-soft); color: var(--neg); }
+.pill.add { border-style: dashed; color: var(--text-2); padding: 0 12px; font-size: 15px; line-height: 1; }
+.count-badge {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700; color: var(--text);
+  background: var(--muted-chip); border-radius: 999px; padding: 4px 11px;
+}
+.count-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+.count-badge .ms { color: var(--text-3); font-weight: 500; font-size: 11px; }
+
+/* ============================================================ tabs row */
+.tabsrow {
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--bg);
+  overflow-x: auto; scrollbar-width: none;
+}
+.tabsrow::-webkit-scrollbar { display: none; }
+.tab {
+  padding: 7px 11px 8px; font-size: 12.5px; font-weight: 600; color: var(--text-3);
+  border-bottom: 2px solid transparent; white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--brand-text); border-bottom-color: var(--brand); }
+.tabsrow .gear { margin-left: auto; }
+
+/* ============================================================ table */
+.tablewrap { flex: 1 1 auto; overflow: auto; background: var(--panel); position: relative; }
+table.grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: max-content; min-width: 100%; }
+table.grid th, table.grid td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.grid thead th {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--text-3); font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  text-align: right; padding: 8px 10px; cursor: pointer; user-select: none;
+  white-space: nowrap;
+}
+table.grid thead th:hover { color: var(--text); background: var(--hover); }
+table.grid thead th.l { text-align: left; }
+table.grid thead th .arr { display: inline-block; margin-left: 3px; font-size: 9px; color: var(--brand-text); }
+table.grid thead th.sorted { color: var(--text); }
+table.grid tbody td {
+  border-bottom: 1px solid var(--border);
+  padding: 7px 10px; text-align: right; color: var(--text-body); font-variant-numeric: tabular-nums;
+}
+table.grid tbody td.l { text-align: left; }
+table.grid tbody tr { cursor: pointer; }
+table.grid tbody tr:hover td { background: var(--hover); }
+table.grid tbody tr.inWl td:first-child .wl { color: var(--gold); }
+.num-pos { color: var(--pos); }
+.num-neg { color: var(--neg); }
+.muted { color: var(--text-3); }
+
+/* symbol cell */
+.symcell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.symcell .logo {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: var(--text-2);
+}
+.symcell .meta { min-width: 0; }
+.symcell .t { font-weight: 700; color: var(--text); font-size: 12.5px; line-height: 1.25; }
+.symcell .n { color: var(--text-3); font-size: 11px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
+.wl { flex: 0 0 auto; color: var(--border-strong); font-size: 13px; padding: 2px; border-radius: 4px; }
+.wl:hover { color: var(--gold); }
+.wl.on { color: var(--gold); }
+.chg-chip { display: inline-block; min-width: 46px; text-align: center; border-radius: 5px; padding: 1px 5px; font-weight: 600; }
+.chg-chip.pos { background: var(--pos-soft); color: var(--pos); }
+.chg-chip.neg { background: var(--neg-soft); color: var(--neg); }
+
+.rating { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
+.rating .b { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.r-sbuy { color: var(--pos); } .r-sbuy .b { background: var(--pos); }
+.r-buy { color: var(--pos); } .r-buy .b { background: var(--pos); opacity: .55; }
+.r-neu { color: var(--text-3); } .r-neu .b { background: var(--text-3); }
+.r-sell { color: var(--neg); } .r-sell .b { background: var(--neg); opacity: .55; }
+.r-ssell { color: var(--neg); } .r-ssell .b { background: var(--neg); }
+
+/* states */
+.state {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; text-align: center;
+  background: var(--panel); z-index: 8; padding: 30px;
+}
+.state .big { font-size: 14px; font-weight: 700; color: var(--text); }
+.state .small { font-size: 12.5px; color: var(--text-3); max-width: 380px; }
+.state.hidden { display: none; }
+.spinner {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--brand);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* footer / pagination */
+.tablefoot {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 8px 16px; border-top: 1px solid var(--border); background: var(--bg);
+  font-size: 12px; color: var(--text-3);
+}
+.tablefoot select {
+  height: 26px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); font-size: 12px; padding: 0 4px;
+}
+.pager { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.pager button {
+  min-width: 26px; height: 26px; padding: 0 6px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text-2);
+  font-size: 12px; font-weight: 600;
+}
+.pager button:hover:not(:disabled) { background: var(--hover); }
+.pager button.cur { background: var(--brand); border-color: var(--brand); color: #fff; }
+.pager button:disabled { opacity: .4; cursor: default; }
+.pager .info { padding: 0 6px; }
+
+/* ============================================================ popup */
+.overlay { position: fixed; inset: 0; z-index: 70; }
+.popup {
+  position: fixed; z-index: 71; width: 320px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 12px;
+}
+.popup.wide { width: 380px; }
+.popup .phead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.popup .phead .t { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.popup .phead .x { color: var(--text-3); width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+.popup .phead .x:hover { background: var(--hover); color: var(--text); }
+.popup label.f { display: block; font-size: 11px; font-weight: 600; color: var(--text-3); margin: 8px 0 4px; text-transform: uppercase; letter-spacing: .05em; }
+.row2 { display: flex; gap: 8px; }
+.row2 > div { flex: 1; }
+.popup input[type="text"], .popup input[type="number"], .popup input[type="date"], .popup select {
+  width: 100%; height: 30px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg);
+  outline: none; font-size: 12.5px;
+}
+.popup input:focus, .popup select:focus { border-color: var(--brand); }
+.popup .err { color: var(--neg); font-size: 11px; margin-top: 4px; display: none; }
+.popup .err.show { display: block; }
+
+/* dual range slider */
+.slider { position: relative; height: 26px; margin: 10px 2px 2px; }
+.slider .track { position: absolute; top: 11px; left: 0; right: 0; height: 4px; border-radius: 2px; background: var(--border); }
+.slider .fill { position: absolute; top: 11px; height: 4px; border-radius: 2px; background: var(--brand); }
+.slider input[type="range"] {
+  position: absolute; inset: 0; width: 100%; margin: 0; -webkit-appearance: none; appearance: none;
+  background: transparent; pointer-events: none; height: 26px;
+}
+.slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; pointer-events: auto;
+  width: 14px; height: 14px; border-radius: 50%; background: var(--panel);
+  border: 2px solid var(--brand); box-shadow: var(--shadow-sm); cursor: grab;
+}
+.slider input[type="range"]::-moz-range-thumb {
+  pointer-events: auto; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--panel); border: 2px solid var(--brand); cursor: grab;
+}
+
+/* preset chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip {
+  padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text-2); font-size: 11.5px; font-weight: 600;
+  white-space: nowrap;
+}
+.chip:hover { border-color: var(--brand); color: var(--brand-text); background: var(--brand-soft); }
+.chip.on { border-color: var(--brand); color: var(--brand-text); background: var(--brand-soft); }
+
+/* segmented rating */
+.seg { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { flex: 1 1 0; padding: 7px 4px; font-size: 11.5px; font-weight: 600; color: var(--text-3); background: var(--panel); border-right: 1px solid var(--border); min-width: 60px; }
+.seg button:last-child { border-right: 0; }
+.seg button:hover { background: var(--hover); }
+.seg button.on { background: var(--brand-soft); color: var(--brand-text); }
+.seg button.on.sello { background: var(--neg-soft); color: var(--neg); }
+
+/* multi-select checklist */
+.checklist { max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.checklist .ci {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 10px; text-align: left; font-size: 12.5px; color: var(--text-body);
+  border-bottom: 1px solid var(--border);
+}
+.checklist .ci:last-child { border-bottom: 0; }
+.checklist .ci:hover { background: var(--hover); }
+.checklist .ci .box {
+  width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--border-strong);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; flex: 0 0 auto;
+}
+.checklist .ci.on .box { background: var(--brand); border-color: var(--brand); }
+.checklist .ci .cnt { margin-left: auto; color: var(--text-3); font-size: 11px; }
+
+/* popup footer */
+.pfoot { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.pfoot .preview { font-size: 11.5px; color: var(--text-3); }
+.pfoot .preview b { color: var(--text); }
+.pfoot .grow { flex: 1; }
+.pfoot .btn { height: 28px; padding: 0 10px; font-size: 12px; }
+
+/* ============================================================ drawer */
+.drawer {
+  position: fixed; top: 0; right: -420px; bottom: 0; width: 420px; max-width: 92vw; z-index: 80;
+  background: var(--panel); border-left: 1px solid var(--border);
+  box-shadow: var(--shadow); transition: right .18s ease;
+  display: flex; flex-direction: column;
+}
+.drawer.open { right: 0; }
+.drawer .dhead { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+.drawer .dhead .logo { width: 34px; height: 34px; border-radius: 50%; font-size: 13px; }
+.drawer .dhead .t { font-size: 15px; font-weight: 700; color: var(--text); }
+.drawer .dhead .n { font-size: 12px; color: var(--text-3); }
+.drawer .dbody { flex: 1; overflow: auto; padding: 6px 16px 20px; }
+.drawer .grp { margin-top: 14px; }
+.drawer .grp h4 { margin: 0 0 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.drawer .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 14px; }
+.drawer .kv .row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--border); font-size: 12px; }
+.drawer .kv .k { color: var(--text-3); }
+.drawer .kv .v { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.drawer .dfoot { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.dclose { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 7px; color: var(--text-3); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.dclose:hover { background: var(--hover); color: var(--text); }
+
+/* toast */
+#toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--text); color: var(--bg); font-size: 12.5px; font-weight: 600;
+  border-radius: 9px; padding: 9px 16px; box-shadow: var(--shadow);
+  opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 100;
+  max-width: 80vw; text-align: center;
+}
+#toast.show { opacity: 1; }
+
+/* colsetup list */
+.colsetup .ci .cnt { display: none; }
+
+/* responsive */
+@media (max-width: 860px) {
+  .topbar { padding: 8px 10px 6px; }
+  .filterbar { padding: 2px 10px 8px; }
+  .tabsrow { padding: 0 10px; }
+  .brand .sub { display: none; }
+  .btn .lbl { display: none; }
+  .drawer { width: 100vw; max-width: 100vw; }
+  .count-badge .ms { display: none; }
+}
+@media (max-width: 560px) {
+  .mkt { display: none; }
+  .pill { max-width: 200px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">TP</span>
+      <h1>Stock Screener</h1>
+      <span class="sub" id="asOf"></span>
+    </div>
+    <div class="mkt" title="Market">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.9 5.7 3.9 9s-1.4 6.4-3.9 9c-2.5-2.6-3.9-5.7-3.9-9S9.5 5.6 12 3z"/></svg>
+      <select id="market" aria-label="Market">
+        <option value="all">All India</option>
+        <option value="NSE" selected>NSE</option>
+        <option value="BSE" disabled>BSE (coming soon)</option>
+      </select>
+    </div>
+    <div class="spacer"></div>
+    <div class="menu-wrap">
+      <button class="btn" id="btnScreens" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        <span class="lbl">My Screens</span>
+      </button>
+    </div>
+    <div class="menu-wrap">
+      <button class="btn" id="btnPresets" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <span class="lbl">Templates</span>
+      </button>
+    </div>
+    <div class="menu-wrap">
+      <button class="btn" id="btnWatchlist" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span class="lbl">Watchlist</span> <span id="wlCount" class="muted"></span>
+      </button>
+    </div>
+    <button class="btn" id="btnExport" title="Export visible results to CSV">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      <span class="lbl">CSV</span>
+    </button>
+    <button class="btn" id="btnReset" title="Reset all filters">
+      <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      <span class="lbl">Reset</span>
+    </button>
+    <button class="btn ghost" id="btnTheme" title="Toggle dark / light theme" aria-label="Toggle theme"></button>
+  </header>
+
+  <div class="filterbar" id="filterBar"></div>
+
+  <div class="tabsrow" id="tabsRow">
+    <button class="gear btn ghost" id="btnColSetup" title="Column settings" aria-label="Column settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+
+  <div class="tablewrap" id="tableWrap">
+    <div class="state" id="loadState">
+      <div class="spinner"></div>
+      <div class="big">Loading the NSE universe…</div>
+      <div class="small">Quotes, technicals and fundamentals come from TradePulse's own database — updated every trading day at 4:00 pm IST.</div>
+    </div>
+    <div class="state hidden" id="errState">
+      <div class="big">Could not load data</div>
+      <div class="small" id="errMsg"></div>
+      <button class="btn primary" id="btnRetry">Retry</button>
+    </div>
+    <div class="state hidden" id="emptyState">
+      <div class="big">No stocks match</div>
+      <div class="small">Try loosening a filter.</div>
+      <button class="btn" id="btnClearLast">Clear last filter</button>
+    </div>
+    <table class="grid" id="grid" aria-label="Screener results">
+      <colgroup id="cg"></colgroup>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <footer class="tablefoot">
+    <span id="footCount"></span>
+    <label>Rows
+      <select id="pageSize" aria-label="Rows per page">
+        <option>50</option><option selected>100</option><option>250</option>
+      </select>
+    </label>
+    <div class="pager" id="pager"></div>
+  </footer>
+</div>
+
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <button class="dclose" id="drawerClose" aria-label="Close details">✕</button>
+  <div class="dhead" id="dhead"></div>
+  <div class="dbody" id="dbody"></div>
+  <div class="dfoot">
+    <button class="btn primary" id="dWl" style="flex:1"></button>
+    <a class="btn" id="dChart" target="_blank" rel="noopener" href="#">Open chart ↗</a>
+  </div>
+</aside>
+
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* ============================================================================
+   TradePulse Stock Screener — TradingView-style, single file, no build step.
+   Data adapter at the bottom swaps cleanly between mock and the live API;
+   this build ships ONLY the live adapter (no mock data anywhere).
+   ========================================================================= */
+
+/* ------------------------------------------------------------- data adapter */
+const DataAdapter = {
+  _cache: null,
+  /** Real universe from TradePulse's database (Yahoo-sourced, EOD-refreshed). */
+  async getUniverse() {
+    if (this._cache && Date.now() - this._cache.at < 60_000) return this._cache.data;
+    const res = await fetch("/api/screener/universe", { cache: "no-store" });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { msg = (await res.json()).error || msg; } catch {}
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    this._cache = { at: Date.now(), data };
+    return data;
+  },
+};
+
+/* ------------------------------------------------------------- helpers */
+const $ = (id) => document.getElementById(id);
+const NF = new Intl.NumberFormat("en-IN");
+const NF1 = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const NF2 = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function inGroup(v) { return NF.format(Math.round(v)); }
+/** ₹ crore / lakh — Indian market convention. Absolute INR in → text. */
+function fmtCr(v) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  const a = Math.abs(v);
+  if (a >= 1e7) return NF2.format(v / 1e7) + " L Cr";   // lakh crore
+  if (a >= 1e5) return NF2.format(v / 1e5) + " Cr";
+  return NF.format(Math.round(v));
+}
+function fmtNum(v, dp) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  if (dp === 0) return inGroup(v);
+  return (dp === 1 ? NF1 : NF2).format(v);
+}
+function fmtPct(v, dp = 2) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return NF2.format(v) + "%";
+}
+function fmtPrice(v) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return "₹" + (Math.abs(v) >= 1000 ? NF.format(v) : NF2.format(v));
+}
+function fmtVol(v) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  if (v >= 1e7) return NF2.format(v / 1e7) + " Cr";
+  if (v >= 1e5) return NF2.format(v / 1e5) + " L";
+  if (v >= 1e3) return NF1.format(v / 1e3) + " K";
+  return inGroup(v);
+}
+function fmtDate(d) {
+  if (!d) return "—";
+  const dt = new Date(d + "T00:00:00");
+  return dt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+const cls = (v) => (v == null || !Number.isFinite(v) ? "" : v > 0 ? "num-pos" : v < 0 ? "num-neg" : "");
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+const LOGO_TONES = ["var(--logo-1)", "var(--logo-2)", "var(--logo-3)", "var(--logo-4)", "var(--logo-5)"];
+function logoHtml(sym, size) {
+  let h = 0;
+  for (let i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) >>> 0;
+  const init = sym.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
+  return `<span class="logo" style="background:${LOGO_TONES[h % LOGO_TONES.length]}${size ? `;width:${size}px;height:${size}px;font-size:${Math.round(size / 2.4)}px` : ""}">${esc(init)}</span>`;
+}
+function ratingClass(label) {
+  return { "Strong Buy": "r-sbuy", Buy: "r-buy", Neutral: "r-neu", Sell: "r-sell", "Strong Sell": "r-ssell" }[label] || "r-neu";
+}
+const TECH_LEVELS = ["Strong Sell", "Sell", "Neutral", "Buy", "Strong Buy"];
+const TECH_VAL = { "Strong Sell": -2, Sell: -1, Neutral: 0, Buy: 1, "Strong Buy": 2 };
+/** analystMean 1..5 → label (1 = Strong Buy). */
+const analystLabel = (m) => (m == null ? null : m <= 1.5 ? "Strong Buy" : m <= 2.5 ? "Buy" : m <= 3.5 ? "Neutral" : m <= 4.5 ? "Sell" : "Strong Sell");
+
+/* ============================================================================
+   FILTER CONFIG — the single source of truth. The UI (pills, popups) AND the
+   matching engine are both generated from this array; a new filter is one
+   entry. type ∈ range | multi | rating | periodRange | technical | text | bool
+   ========================================================================= */
+const FILTERS = [
+  // ---- 1. Price & Volume ----
+  { id: "q",        label: "Symbol / Name", cat: "Price & Volume", type: "text" },
+  { id: "price",    label: "Price", cat: "Price & Volume", type: "range", field: "price", unit: "₹", fmt: "price",
+    presets: [{ l: "< ₹100", min: null, max: 100 }, { l: "₹100–500", min: 100, max: 500 }, { l: "₹500–2,000", min: 500, max: 2000 }, { l: "> ₹2,000", min: 2000, max: null }] },
+  { id: "chgPct",   label: "Change %", cat: "Price & Volume", type: "range", field: "chgPct", unit: "%",
+    presets: [{ l: "< -5%", max: -5 }, { l: "-5% to 0", min: -5, max: 0 }, { l: "0 to 5%", min: 0, max: 5 }, { l: "> 5%", min: 5 }] },
+  { id: "chg",      label: "Change", cat: "Price & Volume", type: "range", field: "chg", unit: "₹", fmt: "price" },
+  { id: "gapPct",   label: "Gap %", cat: "Price & Volume", type: "range", field: "gapPct", unit: "%",
+    presets: [{ l: "Gap up > 3%", min: 3 }, { l: "Gap up > 5%", min: 5 }, { l: "Gap down > 3%", max: -3 }, { l: "Gap down > 5%", max: -5 }] },
+  { id: "vol",      label: "Volume", cat: "Price & Volume", type: "range", field: "vol", unit: "", fmt: "vol",
+    presets: [{ l: "> 1 Cr", min: 1e7 }, { l: "> 10 L", min: 1e6 }, { l: "> 1 L", min: 1e5 }] },
+  { id: "relVol",   label: "Relative Volume", cat: "Price & Volume", type: "range", field: "relVol", unit: "×",
+    presets: [{ l: "> 1×", min: 1 }, { l: "> 1.5×", min: 1.5 }, { l: "> 2×", min: 2 }, { l: "> 3×", min: 3 }] },
+  { id: "avgVol20", label: "Avg Volume (20D)", cat: "Price & Volume", type: "range", field: "avgVol20", unit: "", fmt: "vol",
+    presets: [{ l: "> 10 L", min: 1e6 }, { l: "> 1 Cr", min: 1e7 }] },
+  { id: "avgVol90", label: "Avg Volume (90D)", cat: "Price & Volume", type: "range", field: "avgVol90", unit: "", fmt: "vol" },
+  { id: "valCr",    label: "Value Traded", cat: "Price & Volume", type: "range", field: "valCr", unit: "Cr",
+    presets: [{ l: "> ₹100 Cr", min: 100 }, { l: "> ₹500 Cr", min: 500 }, { l: "> ₹1,000 Cr", min: 1000 }] },
+  { id: "hi52",     label: "52W High", cat: "Price & Volume", type: "range", field: "hi52", unit: "₹", fmt: "price" },
+  { id: "lo52",     label: "52W Low", cat: "Price & Volume", type: "range", field: "lo52", unit: "₹", fmt: "price" },
+  { id: "fromHi",   label: "Distance from 52W High", cat: "Price & Volume", type: "range", field: "fromHi", unit: "%", lowerBetter: true,
+    presets: [{ l: "Within 5%", max: 5 }, { l: "Within 10%", max: 10 }, { l: "Within 25%", max: 25 }, { l: "> 50% down", min: 50 }] },
+  { id: "fromLo",   label: "Distance from 52W Low", cat: "Price & Volume", type: "range", field: "fromLo", unit: "%",
+    presets: [{ l: "Within 10%", max: 10 }, { l: "> 50% up", min: 50 }, { l: "> 100% up", min: 100 }] },
+  { id: "fromAth",  label: "From All-Time High", cat: "Price & Volume", type: "range", field: "fromAth", unit: "%", lowerBetter: true,
+    presets: [{ l: "Within 5% of ATH", max: 5 }, { l: "Within 10% of ATH", max: 10 }, { l: "New highs only", max: 0.5 }] },
+  // ---- 2. Market Data ----
+  { id: "mcap",     label: "Market Cap", cat: "Market Data", type: "range", field: "mcap", unit: "Cr", fmt: "cr",
+    presets: [{ l: "Micro < ₹500 Cr", max: 500 }, { l: "Small ₹500–5,000 Cr", min: 500, max: 5000 }, { l: "Mid ₹5,000–20,000 Cr", min: 5000, max: 20000 }, { l: "Large > ₹20,000 Cr", min: 20000 }, { l: "Mega > ₹1 L Cr", min: 100000 }] },
+  { id: "mcapCls",  label: "Market Cap Class", cat: "Market Data", type: "multi", field: "mcapCls",
+    options: ["Mega Cap", "Large Cap", "Mid Cap", "Small Cap", "Micro Cap"] },
+  { id: "ev",       label: "Enterprise Value", cat: "Market Data", type: "range", field: "ev", unit: "Cr", fmt: "cr" },
+  { id: "sharesOut",label: "Shares Outstanding", cat: "Market Data", type: "range", field: "sharesOut", unit: "", fmt: "vol" },
+  { id: "fno",      label: "F&O Stock", cat: "Market Data", type: "multi", field: "fno", bool: true, options: ["Yes", "No"] },
+  { id: "n50",      label: "Nifty 50", cat: "Market Data", type: "multi", field: "n50", bool: true, options: ["Yes", "No"] },
+  // ---- 3. Valuation ----
+  { id: "pe",       label: "P/E", cat: "Valuation", type: "range", field: "pe", unit: "×", neg: "Negative (loss-making)",
+    presets: [{ l: "< 15", max: 15 }, { l: "15–25", min: 15, max: 25 }, { l: "25–50", min: 25, max: 50 }, { l: "> 50", min: 50 }, { l: "Negative", max: 0 }] },
+  { id: "fwdPe",    label: "Forward P/E", cat: "Valuation", type: "range", field: "fwdPe", unit: "×",
+    presets: [{ l: "< 15", max: 15 }, { l: "15–25", min: 15, max: 25 }, { l: "> 25", min: 25 }] },
+  { id: "peg",      label: "PEG", cat: "Valuation", type: "range", field: "peg", unit: "×",
+    presets: [{ l: "< 1", max: 1 }, { l: "1–2", min: 1, max: 2 }, { l: "> 2", min: 2 }] },
+  { id: "pb",       label: "P/B", cat: "Valuation", type: "range", field: "pb", unit: "×",
+    presets: [{ l: "< 1", max: 1 }, { l: "1–3", min: 1, max: 3 }, { l: "> 3", min: 3 }] },
+  { id: "ps",       label: "P/S", cat: "Valuation", type: "range", field: "ps", unit: "×" },
+  { id: "evEbitda", label: "EV/EBITDA", cat: "Valuation", type: "range", field: "evEbitda", unit: "×",
+    presets: [{ l: "< 8", max: 8 }, { l: "8–15", min: 8, max: 15 }, { l: "> 15", min: 15 }] },
+  { id: "evRev",    label: "EV/Revenue", cat: "Valuation", type: "range", field: "evRev", unit: "×" },
+  { id: "pCf",      label: "Price / Cash Flow", cat: "Valuation", type: "range", field: "pCf", unit: "×" },
+  { id: "pFcf",     label: "Price / FCF", cat: "Valuation", type: "range", field: "pFcf", unit: "×" },
+  // ---- 4. Dividends ----
+  { id: "divYld",   label: "Dividend Yield", cat: "Dividends", type: "range", field: "divYld", unit: "%",
+    presets: [{ l: "> 1%", min: 1 }, { l: "> 2%", min: 2 }, { l: "> 4%", min: 4 }, { l: "Payers only", min: 0.01 }] },
+  { id: "dps",      label: "Dividend / Share", cat: "Dividends", type: "range", field: "dps", unit: "₹", fmt: "price" },
+  { id: "payout",   label: "Payout Ratio", cat: "Dividends", type: "range", field: "payout", unit: "%",
+    presets: [{ l: "< 30%", max: 30 }, { l: "30–60%", min: 30, max: 60 }, { l: "> 60%", min: 60 }] },
+  // ---- 5. Profitability ----
+  { id: "grossM",   label: "Gross Margin", cat: "Profitability", type: "range", field: "grossM", unit: "%",
+    presets: [{ l: "> 25%", min: 25 }, { l: "> 50%", min: 50 }] },
+  { id: "opM",      label: "Operating Margin", cat: "Profitability", type: "range", field: "opM", unit: "%",
+    presets: [{ l: "> 10%", min: 10 }, { l: "> 20%", min: 20 }] },
+  { id: "netM",     label: "Net Margin", cat: "Profitability", type: "range", field: "netM", unit: "%",
+    presets: [{ l: "> 10%", min: 10 }, { l: "> 20%", min: 20 }] },
+  { id: "roe",      label: "ROE", cat: "Profitability", type: "range", field: "roe", unit: "%",
+    presets: [{ l: "> 15%", min: 15 }, { l: "> 20%", min: 20 }, { l: "> 25%", min: 25 }] },
+  { id: "roa",      label: "ROA", cat: "Profitability", type: "range", field: "roa", unit: "%",
+    presets: [{ l: "> 5%", min: 5 }, { l: "> 10%", min: 10 }] },
+  { id: "ebitdaM",  label: "EBITDA Margin", cat: "Profitability", type: "range", field: "ebitdaM", unit: "%",
+    presets: [{ l: "> 15%", min: 15 }, { l: "> 25%", min: 25 }] },
+  // ---- 6. Growth ----
+  { id: "revQoQ",   label: "Revenue Growth QoQ", cat: "Growth", type: "range", field: "revQoQ", unit: "%" },
+  { id: "revYoY",   label: "Revenue Growth YoY", cat: "Growth", type: "range", field: "revYoY", unit: "%",
+    presets: [{ l: "> 10%", min: 10 }, { l: "> 25%", min: 25 }] },
+  { id: "revCagr3", label: "Revenue CAGR 3Y", cat: "Growth", type: "range", field: "revCagr3", unit: "%",
+    presets: [{ l: "> 10%", min: 10 }, { l: "> 20%", min: 20 }] },
+  { id: "revCagr5", label: "Revenue CAGR 5Y", cat: "Growth", type: "range", field: "revCagr5", unit: "%" },
+  { id: "epsQoQ",   label: "EPS Growth QoQ", cat: "Growth", type: "range", field: "epsQoQ", unit: "%" },
+  { id: "epsYoY",   label: "EPS Growth YoY", cat: "Growth", type: "range", field: "epsYoY", unit: "%",
+    presets: [{ l: "> 10%", min: 10 }, { l: "> 25%", min: 25 }] },
+  { id: "epsCagr3", label: "EPS CAGR 3Y", cat: "Growth", type: "range", field: "epsCagr3", unit: "%" },
+  { id: "profitYoY",label: "Profit Growth YoY", cat: "Growth", type: "range", field: "profitYoY", unit: "%",
+    presets: [{ l: "> 10%", min: 10 }, { l: "> 25%", min: 25 }] },
+  // ---- 7. Financial Health ----
+  { id: "de",       label: "Debt / Equity", cat: "Financial Health", type: "range", field: "de", unit: "×", lowerBetter: true,
+    presets: [{ l: "Debt-free (< 0.05)", max: 0.05 }, { l: "< 0.5", max: 0.5 }, { l: "< 1", max: 1 }, { l: "> 2", min: 2 }] },
+  { id: "currentR", label: "Current Ratio", cat: "Financial Health", type: "range", field: "currentR", unit: "×",
+    presets: [{ l: "> 1", min: 1 }, { l: "> 1.5", min: 1.5 }, { l: "> 2", min: 2 }] },
+  { id: "quickR",   label: "Quick Ratio", cat: "Financial Health", type: "range", field: "quickR", unit: "×",
+    presets: [{ l: "> 1", min: 1 }] },
+  { id: "netDebt",  label: "Net Debt", cat: "Financial Health", type: "range", field: "netDebt", unit: "Cr", fmt: "cr",
+    presets: [{ l: "Net cash (< 0)", max: 0 }, { l: "> ₹1,000 Cr", min: 1000 }] },
+  { id: "totalDebt",label: "Total Debt", cat: "Financial Health", type: "range", field: "totalDebt", unit: "Cr", fmt: "cr" },
+  { id: "cash",     label: "Cash", cat: "Financial Health", type: "range", field: "cash", unit: "Cr", fmt: "cr" },
+  // ---- 8. Income Statement ----
+  { id: "revenue",  label: "Revenue", cat: "Income Statement", type: "range", field: "revenue", unit: "Cr", fmt: "cr",
+    presets: [{ l: "> ₹1,000 Cr", min: 1000 }, { l: "> ₹5,000 Cr", min: 5000 }] },
+  { id: "grossProfit", label: "Gross Profit", cat: "Income Statement", type: "range", field: "grossProfit", unit: "Cr", fmt: "cr" },
+  { id: "opIncome", label: "Operating Income", cat: "Income Statement", type: "range", field: "opIncome", unit: "Cr", fmt: "cr" },
+  { id: "ebitda",   label: "EBITDA", cat: "Income Statement", type: "range", field: "ebitda", unit: "Cr", fmt: "cr" },
+  { id: "netIncome",label: "Net Income", cat: "Income Statement", type: "range", field: "netIncome", unit: "Cr", fmt: "cr",
+    presets: [{ l: "Profitable", min: 0.01 }, { l: "> ₹500 Cr", min: 500 }, { l: "Loss-making", max: 0 }] },
+  { id: "eps",      label: "EPS (TTM)", cat: "Income Statement", type: "range", field: "eps", unit: "₹", fmt: "price" },
+  // ---- 9. Balance Sheet ----
+  { id: "assets",   label: "Total Assets", cat: "Balance Sheet", type: "range", field: "assets", unit: "Cr", fmt: "cr" },
+  { id: "liabilities", label: "Total Liabilities", cat: "Balance Sheet", type: "range", field: "liabilities", unit: "Cr", fmt: "cr" },
+  { id: "equity",   label: "Shareholder Equity", cat: "Balance Sheet", type: "range", field: "equity", unit: "Cr", fmt: "cr" },
+  { id: "bvps",     label: "Book Value / Share", cat: "Balance Sheet", type: "range", field: "bvps", unit: "₹", fmt: "price" },
+  // ---- 10. Cash Flow ----
+  { id: "ocf",      label: "Operating Cash Flow", cat: "Cash Flow", type: "range", field: "ocf", unit: "Cr", fmt: "cr",
+    presets: [{ l: "Positive", min: 0.01 }, { l: "> ₹500 Cr", min: 500 }] },
+  { id: "icf",      label: "Investing Cash Flow", cat: "Cash Flow", type: "range", field: "icf", unit: "Cr", fmt: "cr" },
+  { id: "fcf",      label: "Free Cash Flow", cat: "Cash Flow", type: "range", field: "fcf", unit: "Cr", fmt: "cr",
+    presets: [{ l: "Positive FCF", min: 0.01 }, { l: "> ₹500 Cr", min: 500 }] },
+  { id: "fcfM",     label: "FCF Margin", cat: "Cash Flow", type: "range", field: "fcfM", unit: "%",
+    presets: [{ l: "> 10%", min: 10 }, { l: "> 20%", min: 20 }] },
+  // ---- 11. Performance (period + range) ----
+  { id: "perf",     label: "Performance", cat: "Performance", type: "periodRange", unit: "%",
+    periods: [
+      { id: "perf1D", label: "1D" }, { id: "perf1W", label: "1W" }, { id: "perf1M", label: "1M" },
+      { id: "perf3M", label: "3M" }, { id: "perf6M", label: "6M" }, { id: "perfYTD", label: "YTD" },
+      { id: "perf1Y", label: "1Y" }, { id: "perf3Y", label: "3Y" }, { id: "perf5Y", label: "5Y" },
+    ],
+    presets: [{ l: "> 0%", min: 0 }, { l: "> 10%", min: 10 }, { l: "> 25%", min: 25 }, { l: "< 0%", max: 0 }, { l: "< -10%", max: -10 }] },
+  { id: "volat",    label: "Volatility (annualised)", cat: "Performance", type: "periodRange", unit: "%",
+    periods: [ { id: "volatW", label: "1W" }, { id: "volatM", label: "1M" } ],
+    presets: [{ l: "< 20%", max: 20 }, { l: "> 40%", min: 40 }] },
+  { id: "beta",     label: "Beta (1Y)", cat: "Performance", type: "range", field: "beta", unit: "",
+    presets: [{ l: "< 0.5", max: 0.5 }, { l: "0.5–1.5", min: 0.5, max: 1.5 }, { l: "> 1.5", min: 1.5 }] },
+  { id: "atrPct",   label: "ATR %", cat: "Performance", type: "range", field: "atrPct", unit: "%", lowerBetter: true,
+    presets: [{ l: "< 2%", max: 2 }, { l: "> 5%", min: 5 }] },
+  { id: "atr14",    label: "ATR (14)", cat: "Performance", type: "range", field: "atr14", unit: "₹", fmt: "price" },
+  // ---- 12. Technicals ----
+  { id: "maPos",    label: "Price vs Moving Average", cat: "Technicals", type: "technical", variant: "maPos",
+    maChoices: [["sma10", "SMA 10"], ["sma20", "SMA 20"], ["sma50", "SMA 50"], ["sma100", "SMA 100"], ["sma200", "SMA 200"],
+                 ["ema10", "EMA 10"], ["ema20", "EMA 20"], ["ema50", "EMA 50"], ["ema100", "EMA 100"], ["ema200", "EMA 200"]] },
+  { id: "rsi14",    label: "RSI (14)", cat: "Technicals", type: "range", field: "rsi14", unit: "",
+    presets: [{ l: "Oversold < 30", max: 30 }, { l: "Neutral 30–70", min: 30, max: 70 }, { l: "Overbought > 70", min: 70 }] },
+  { id: "macd",     label: "MACD", cat: "Technicals", type: "technical", variant: "macd",
+    ops: [["bull", "Bullish (hist > 0)"], ["bear", "Bearish (hist < 0)"], ["above0", "Above zero"], ["below0", "Below zero"]] },
+  { id: "stochK",   label: "Stochastic %K", cat: "Technicals", type: "range", field: "stochK", unit: "",
+    presets: [{ l: "Oversold < 20", max: 20 }, { l: "Overbought > 80", min: 80 }] },
+  { id: "adx",      label: "ADX (14)", cat: "Technicals", type: "range", field: "adx", unit: "",
+    presets: [{ l: "Strong trend > 25", min: 25 }, { l: "Very strong > 40", min: 40 }, { l: "Weak < 20", max: 20 }] },
+  { id: "cci20",    label: "CCI (20)", cat: "Technicals", type: "range", field: "cci20", unit: "",
+    presets: [{ l: "Oversold < -100", max: -100 }, { l: "Overbought > 100", min: 100 }] },
+  { id: "willR",    label: "Williams %R", cat: "Technicals", type: "range", field: "willR", unit: "",
+    presets: [{ l: "Oversold < -80", max: -80 }, { l: "Overbought > -20", min: -20 }] },
+  { id: "ao",       label: "Awesome Oscillator", cat: "Technicals", type: "technical", variant: "sign",
+    field: "ao", ops: [["pos", "Above zero"], ["neg", "Below zero"]] },
+  { id: "uo",       label: "Ultimate Oscillator", cat: "Technicals", type: "range", field: "uo", unit: "",
+    presets: [{ l: "Oversold < 30", max: 30 }, { l: "Overbought > 70", min: 70 }] },
+  { id: "mom10",    label: "Momentum (10D)", cat: "Technicals", type: "range", field: "mom10", unit: "%" },
+  { id: "bbB",      label: "Bollinger %B", cat: "Technicals", type: "range", field: "bbB", unit: "",
+    presets: [{ l: "Lower band < 10", max: 10 }, { l: "Upper band > 90", min: 90 }] },
+  { id: "bbW",      label: "Bollinger Width", cat: "Technicals", type: "range", field: "bbW", unit: "%", lowerBetter: true,
+    presets: [{ l: "Squeeze < 8%", max: 8 }, { l: "Wide > 20%", min: 20 }] },
+  { id: "tech",     label: "Technical Rating", cat: "Technicals", type: "rating", field: "tech", levels: TECH_LEVELS },
+  { id: "osc",      label: "Oscillators Rating", cat: "Technicals", type: "rating", field: "osc", levels: TECH_LEVELS },
+  { id: "maR",      label: "Moving Averages Rating", cat: "Technicals", type: "rating", field: "maR", levels: TECH_LEVELS },
+  { id: "w52",      label: "Price vs 52-Week Range", cat: "Technicals", type: "technical", variant: "w52",
+    ops: [["nearHigh5", "Within 5% of 52W High"], ["newHigh", "At 52W High (±0.5%)"], ["nearHigh10", "Within 10% of 52W High"],
+           ["nearLow5", "Within 5% of 52W Low"], ["nearLow10", "Within 10% of 52W Low"]] },
+  { id: "supertrend", label: "Supertrend (10, 3)", cat: "Technicals", type: "technical", variant: "st",
+    ops: [["up", "Uptrend"], ["down", "Downtrend"]] },
+  { id: "golden",   label: "Golden Cross (SMA20 > SMA50)", cat: "Technicals", type: "multi", field: "golden", bool: true, options: ["Yes", "No"] },
+  { id: "emaX",     label: "EMA 20 > EMA 50", cat: "Technicals", type: "multi", field: "emaX", bool: true, options: ["Yes", "No"] },
+  { id: "above200", label: "Above SMA 200", cat: "Technicals", type: "multi", field: "above200", bool: true, options: ["Yes", "No"] },
+  { id: "tight20",  label: "20D Range Tightness", cat: "Technicals", type: "range", field: "tight20", unit: "%", lowerBetter: true,
+    presets: [{ l: "Very tight < 5%", max: 5 }, { l: "Tight < 10%", max: 10 }, { l: "Wide > 20%", min: 20 }] },
+  // ---- 13. Analyst ----
+  { id: "analystF", label: "Analyst Rating", cat: "Analyst", type: "rating", field: "analyst", levels: TECH_LEVELS, scale: "analyst" },
+  { id: "upside",   label: "Upside to Target", cat: "Analyst", type: "range", field: "upside", unit: "%",
+    presets: [{ l: "> 10%", min: 10 }, { l: "> 25%", min: 25 }, { l: "> 50%", min: 50 }] },
+  { id: "nAnalysts",label: "Number of Analysts", cat: "Analyst", type: "range", field: "nAnalysts", unit: "", dp: 0,
+    presets: [{ l: "> 5", min: 5 }, { l: "> 20", min: 20 }] },
+  // ---- 14. Earnings ----
+  { id: "earnings", label: "Next Earnings", cat: "Earnings", type: "technical", variant: "earn",
+    ops: [["week", "This week"], ["nextweek", "Next week"], ["month", "This month"], ["any", "Has a date"]] },
+  // ---- 15. Descriptive ----
+  { id: "sector",   label: "Sector", cat: "Descriptive", type: "multi", field: "sector", dynamic: "sector" },
+  { id: "industry", label: "Industry Group", cat: "Descriptive", type: "multi", field: "industry", dynamic: "industry" },
+  { id: "subInd",   label: "Industry Sub-Group", cat: "Descriptive", type: "multi", field: "subInd", dynamic: "subInd" },
+  { id: "exch",     label: "Exchange", cat: "Descriptive", type: "multi", field: "exch", options: ["NSE"] },
+];
+const FILTER_BY_ID = Object.fromEntries(FILTERS.map((f) => [f.id, f]));
+
+/* ============================================================================
+   COLUMNS — 10 tabs. fmt: price|cr|vol|pct|x|rating|date|bool|chg
+   ========================================================================= */
+const COLUMNS = [
+  { tab: "Overview", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "price", label: "Price", w: 86, fmt: "price", csv: (r) => r.price },
+    { id: "chgPct", label: "Change %", w: 84, fmt: "chgchip", csv: (r) => r.chgPct },
+    { id: "chg", label: "Change", w: 74, fmt: "signed", csv: (r) => r.chg },
+    { id: "vol", label: "Volume", w: 90, fmt: "vol", csv: (r) => r.vol },
+    { id: "relVol", label: "Rel Volume", w: 84, fmt: "x", csv: (r) => r.relVol },
+    { id: "valCr", label: "Value Traded", w: 100, fmt: "crplain", csv: (r) => r.valCr },
+    { id: "gapPct", label: "Gap %", w: 70, fmt: "pct", csv: (r) => r.gapPct },
+    { id: "mcap", label: "Market Cap", w: 104, fmt: "cr", csv: (r) => r.mcap },
+    { id: "pe", label: "P/E", w: 68, fmt: "x", csv: (r) => r.pe },
+    { id: "divYld", label: "Div Yield", w: 80, fmt: "pct", csv: (r) => r.divYld },
+    { id: "rsi14", label: "RSI 14", w: 66, fmt: "x", csv: (r) => r.rsi14 },
+    { id: "tech", label: "Tech Rating", w: 110, fmt: "rating", csv: (r) => r.tech },
+    { id: "sector", label: "Sector", w: 130, align: "l", fmt: "text", csv: (r) => r.sector },
+  ]},
+  { tab: "Performance", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "perf1D", label: "Perf 1D", w: 76, fmt: "pct", csv: (r) => r.perf1D },
+    { id: "perf1W", label: "Perf 1W", w: 76, fmt: "pct", csv: (r) => r.perf1W },
+    { id: "perf1M", label: "Perf 1M", w: 76, fmt: "pct", csv: (r) => r.perf1M },
+    { id: "perf3M", label: "Perf 3M", w: 76, fmt: "pct", csv: (r) => r.perf3M },
+    { id: "perf6M", label: "Perf 6M", w: 76, fmt: "pct", csv: (r) => r.perf6M },
+    { id: "perfYTD", label: "Perf YTD", w: 76, fmt: "pct", csv: (r) => r.perfYTD },
+    { id: "perf1Y", label: "Perf 1Y", w: 76, fmt: "pct", csv: (r) => r.perf1Y },
+    { id: "perf3Y", label: "Perf 3Y", w: 76, fmt: "pct", csv: (r) => r.perf3Y },
+    { id: "perf5Y", label: "Perf 5Y", w: 76, fmt: "pct", csv: (r) => r.perf5Y },
+    { id: "volatM", label: "Volatility 1M", w: 90, fmt: "pct", csv: (r) => r.volatM },
+    { id: "volatW", label: "Volatility 1W", w: 90, fmt: "pct", csv: (r) => r.volatW },
+    { id: "beta", label: "Beta 1Y", w: 70, fmt: "x", csv: (r) => r.beta },
+    { id: "atr14", label: "ATR (14)", w: 74, fmt: "price", csv: (r) => r.atr14 },
+    { id: "atrPct", label: "ATR %", w: 66, fmt: "pct", csv: (r) => r.atrPct },
+  ]},
+  { tab: "Valuation", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "mcap", label: "Market Cap", w: 104, fmt: "cr", csv: (r) => r.mcap },
+    { id: "ev", label: "Enterprise Value", w: 116, fmt: "cr", csv: (r) => r.ev },
+    { id: "pe", label: "P/E", w: 68, fmt: "x", csv: (r) => r.pe },
+    { id: "fwdPe", label: "Fwd P/E", w: 72, fmt: "x", csv: (r) => r.fwdPe },
+    { id: "peg", label: "PEG", w: 62, fmt: "x", csv: (r) => r.peg },
+    { id: "pb", label: "P/B", w: 62, fmt: "x", csv: (r) => r.pb },
+    { id: "ps", label: "P/S", w: 62, fmt: "x", csv: (r) => r.ps },
+    { id: "evEbitda", label: "EV/EBITDA", w: 86, fmt: "x", csv: (r) => r.evEbitda },
+    { id: "evRev", label: "EV/Revenue", w: 90, fmt: "x", csv: (r) => r.evRev },
+    { id: "pCf", label: "Price/CFO", w: 80, fmt: "x", csv: (r) => r.pCf },
+    { id: "pFcf", label: "Price/FCF", w: 80, fmt: "x", csv: (r) => r.pFcf },
+    { id: "bvps", label: "Book Value", w: 82, fmt: "price", csv: (r) => r.bvps },
+  ]},
+  { tab: "Dividends", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "divYld", label: "Div Yield", w: 80, fmt: "pct", csv: (r) => r.divYld },
+    { id: "dps", label: "Div / Share", w: 86, fmt: "price", csv: (r) => r.dps },
+    { id: "payout", label: "Payout Ratio", w: 90, fmt: "pct", csv: (r) => r.payout },
+    { id: "price", label: "Price", w: 86, fmt: "price", csv: (r) => r.price },
+    { id: "mcap", label: "Market Cap", w: 104, fmt: "cr", csv: (r) => r.mcap },
+    { id: "netM", label: "Net Margin", w: 84, fmt: "pct", csv: (r) => r.netM },
+    { id: "roe", label: "ROE", w: 66, fmt: "pct", csv: (r) => r.roe },
+  ]},
+  { tab: "Profitability", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "grossM", label: "Gross Margin", w: 90, fmt: "pct", csv: (r) => r.grossM },
+    { id: "opM", label: "Operating Margin", w: 104, fmt: "pct", csv: (r) => r.opM },
+    { id: "netM", label: "Net Margin", w: 84, fmt: "pct", csv: (r) => r.netM },
+    { id: "ebitdaM", label: "EBITDA Margin", w: 96, fmt: "pct", csv: (r) => r.ebitdaM },
+    { id: "roe", label: "ROE", w: 66, fmt: "pct", csv: (r) => r.roe },
+    { id: "roa", label: "ROA", w: 66, fmt: "pct", csv: (r) => r.roa },
+    { id: "revenue", label: "Revenue", w: 104, fmt: "cr", csv: (r) => r.revenue },
+    { id: "netIncome", label: "Net Income", w: 104, fmt: "cr", csv: (r) => r.netIncome },
+  ]},
+  { tab: "Operating Metrics", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "revenue", label: "Revenue", w: 104, fmt: "cr", csv: (r) => r.revenue },
+    { id: "ebitda", label: "EBITDA", w: 104, fmt: "cr", csv: (r) => r.ebitda },
+    { id: "ebitdaM", label: "EBITDA Margin", w: 96, fmt: "pct", csv: (r) => r.ebitdaM },
+    { id: "opM", label: "Operating Margin", w: 104, fmt: "pct", csv: (r) => r.opM },
+    { id: "assetTurn", label: "Asset Turnover", w: 92, fmt: "x", csv: (r) => (r.revenue && r.assets ? Number((r.revenue / r.assets).toFixed(2)) : null) },
+    { id: "ndEbitda", label: "Net Debt / EBITDA", w: 108, fmt: "x", csv: (r) => (r.netDebt != null && r.ebitda > 0 ? Number((r.netDebt / r.ebitda).toFixed(2)) : null) },
+    { id: "ocf", label: "Operating CF", w: 104, fmt: "cr", csv: (r) => r.ocf },
+  ]},
+  { tab: "Income Statement", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "revenue", label: "Revenue", w: 104, fmt: "cr", csv: (r) => r.revenue },
+    { id: "grossProfit", label: "Gross Profit", w: 104, fmt: "cr", csv: (r) => r.grossProfit },
+    { id: "opIncome", label: "Operating Income", w: 112, fmt: "cr", csv: (r) => r.opIncome },
+    { id: "ebitda", label: "EBITDA", w: 104, fmt: "cr", csv: (r) => r.ebitda },
+    { id: "netIncome", label: "Net Income", w: 104, fmt: "cr", csv: (r) => r.netIncome },
+    { id: "eps", label: "EPS (TTM)", w: 78, fmt: "price", csv: (r) => r.eps },
+    { id: "revYoY", label: "Rev Growth YoY", w: 100, fmt: "pct", csv: (r) => r.revYoY },
+    { id: "epsYoY", label: "EPS Growth YoY", w: 100, fmt: "pct", csv: (r) => r.epsYoY },
+  ]},
+  { tab: "Balance Sheet", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "assets", label: "Total Assets", w: 110, fmt: "cr", csv: (r) => r.assets },
+    { id: "liabilities", label: "Total Liabilities", w: 116, fmt: "cr", csv: (r) => r.liabilities },
+    { id: "equity", label: "Equity", w: 110, fmt: "cr", csv: (r) => r.equity },
+    { id: "cash", label: "Cash", w: 104, fmt: "cr", csv: (r) => r.cash },
+    { id: "totalDebt", label: "Total Debt", w: 104, fmt: "cr", csv: (r) => r.totalDebt },
+    { id: "netDebt", label: "Net Debt", w: 104, fmt: "cr", csv: (r) => r.netDebt },
+    { id: "de", label: "Debt / Equity", w: 90, fmt: "x", csv: (r) => r.de },
+    { id: "currentR", label: "Current Ratio", w: 90, fmt: "x", csv: (r) => r.currentR },
+    { id: "quickR", label: "Quick Ratio", w: 84, fmt: "x", csv: (r) => r.quickR },
+  ]},
+  { tab: "Cash Flow", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "ocf", label: "Operating CF", w: 110, fmt: "cr", csv: (r) => r.ocf },
+    { id: "icf", label: "Investing CF", w: 110, fmt: "cr", csv: (r) => r.icf },
+    { id: "fcf", label: "Free Cash Flow", w: 112, fmt: "cr", csv: (r) => r.fcf },
+    { id: "fcfM", label: "FCF Margin", w: 90, fmt: "pct", csv: (r) => r.fcfM },
+    { id: "pFcf", label: "Price/FCF", w: 84, fmt: "x", csv: (r) => r.pFcf },
+    { id: "pCf", label: "Price/CFO", w: 84, fmt: "x", csv: (r) => r.pCf },
+    { id: "capex", label: "Capex (OCF−FCF)", w: 116, fmt: "cr", csv: (r) => (r.ocf != null && r.fcf != null ? r.ocf - r.fcf : null) },
+  ]},
+  { tab: "Technicals", cols: [
+    { id: "sym", label: "Symbol", w: 190, align: "l", lock: true, csv: (r) => r.sym },
+    { id: "tech", label: "Tech Rating", w: 110, fmt: "rating", csv: (r) => r.tech },
+    { id: "osc", label: "Oscillators", w: 96, fmt: "rating", csv: (r) => r.osc },
+    { id: "maR", label: "Moving Avgs", w: 96, fmt: "rating", csv: (r) => r.maR },
+    { id: "rsi14", label: "RSI 14", w: 66, fmt: "x", csv: (r) => r.rsi14 },
+    { id: "stochK", label: "Stoch %K", w: 72, fmt: "x", csv: (r) => r.stochK },
+    { id: "adx", label: "ADX 14", w: 66, fmt: "x", csv: (r) => r.adx },
+    { id: "cci20", label: "CCI 20", w: 66, fmt: "x", csv: (r) => r.cci20 },
+    { id: "willR", label: "Williams %R", w: 82, fmt: "x", csv: (r) => r.willR },
+    { id: "macdHist", label: "MACD Hist", w: 80, fmt: "signed", csv: (r) => r.macdHist },
+    { id: "ao", label: "Awesome Osc", w: 84, fmt: "signed", csv: (r) => r.ao },
+    { id: "uo", label: "Ultimate Osc", w: 84, fmt: "x", csv: (r) => r.uo },
+    { id: "bbB", label: "Bollinger %B", w: 84, fmt: "x", csv: (r) => r.bbB },
+    { id: "dist20", label: "vs SMA 20 %", w: 84, fmt: "pct", csv: (r) => r.dist20 },
+    { id: "dist50", label: "vs SMA 50 %", w: 84, fmt: "pct", csv: (r) => r.dist50 },
+    { id: "dist200", label: "vs SMA 200 %", w: 86, fmt: "pct", csv: (r) => r.dist200 },
+    { id: "supertrend", label: "Supertrend", w: 92, fmt: "stdir", csv: (r) => (r.stDir == null ? null : r.stDir === 1 ? "Up" : "Down") },
+    { id: "tight20", label: "20D Tightness", w: 90, fmt: "pct", csv: (r) => r.tight20 },
+    { id: "mom10", label: "Momentum 10D", w: 90, fmt: "pct", csv: (r) => r.mom10 },
+  ]},
+];
+
+/* ============================================================================
+   STATE
+   ========================================================================= */
+const LS = {
+  theme: "tp_screener_theme",
+  screens: "tp_screener_screens_v1",
+  watchlist: "tp_screener_watchlist_v1",
+  hidden: "tp_screener_hidden_cols_v1",
+};
+const state = {
+  rows: [],            // full universe (from DB via /api/screener/universe)
+  filtered: [],
+  filters: new Map(),  // filterId → value
+  lastFilterId: null,  // for "Clear last filter"
+  sort: { key: "mcap", dir: "desc" },
+  page: 1,
+  pageSize: 100,
+  tab: "Overview",
+  market: "NSE",       // NSE | all
+  wlOnly: false,
+  watchlist: new Set(JSON.parse(localStorage.getItem(LS.watchlist) || "[]")),
+  hiddenCols: new Set(JSON.parse(localStorage.getItem(LS.hidden) || "[]")),
+  theme: "light",
+  bounds: new Map(),   // field → [min, max] for sliders
+  lastMs: null,
+};
+
+/* ============================================================================
+   ENGINE — filtering + sorting. Generated from FILTERS; null-safe by design:
+   a row without data for an active filter field is EXCLUDED.
+   ========================================================================= */
+function fieldVal(row, field) {
+  return row[field];
+}
+
+function matchRange(v, min, max) {
+  if (v == null || !Number.isFinite(v)) return false;
+  if (min != null && v < min) return false;
+  if (max != null && v > max) return false;
+  return true;
+}
+
+function boolText(v) { return v === true || v === 1 ? "Yes" : v === false || v === 0 ? "No" : null; }
+
+function matchFilter(row, id, val) {
+  const f = FILTER_BY_ID[id];
+  if (!f) return true;
+  switch (f.type) {
+    case "text": {
+      const q = String(val || "").trim().toUpperCase();
+      if (!q) return true;
+      return row.sym.toUpperCase().includes(q) || row.name.toUpperCase().includes(q);
+    }
+    case "range": {
+      const v = fieldVal(row, f.field);
+      if (f.neg && val.neg) return v != null && v < 0;      // "Negative (loss-making)"
+      return matchRange(v, val.min, val.max);
+    }
+    case "multi": {
+      const set = val; // Set of option strings
+      if (!set.size) return true;
+      const v = f.bool ? boolText(fieldVal(row, f.field)) : fieldVal(row, f.field);
+      if (v == null) return false;
+      return set.has(v);
+    }
+    case "rating": {
+      const set = val; // Set of level labels
+      if (!set.size) return true;
+      let label = fieldVal(row, f.field);
+      if (f.scale === "analyst") label = analystLabel(fieldVal(row, f.field));
+      if (label == null) return false;
+      return set.has(label);
+    }
+    case "periodRange": {
+      const v = fieldVal(row, val.period);
+      return matchRange(v, val.min, val.max);
+    }
+    case "technical": {
+      switch (f.variant) {
+        case "maPos": {
+          const p = row.price, ma = fieldVal(row, val.ma);
+          if (p == null || ma == null) return false;
+          return val.op === "above" ? p > ma : p < ma;
+        }
+        case "macd": {
+          const h = row.macdHist, m = row.macd;
+          if (val.op === "bull") return h != null && h > 0;
+          if (val.op === "bear") return h != null && h < 0;
+          if (val.op === "above0") return m != null && m > 0;
+          return m != null && m < 0;
+        }
+        case "sign": {
+          const v = fieldVal(row, f.field);
+          if (v == null) return false;
+          return val.op === "pos" ? v > 0 : v < 0;
+        }
+        case "w52": {
+          const fh = row.fromHi, fl = row.fromLo;
+          if (val.op === "nearHigh5") return fh != null && fh <= 5;
+          if (val.op === "newHigh") return fh != null && fh <= 0.5;
+          if (val.op === "nearHigh10") return fh != null && fh <= 10;
+          if (val.op === "nearLow5") return fl != null && fl <= 5;
+          return fl != null && fl <= 10;
+        }
+        case "st": {
+          const d = row.stDir;
+          if (d == null) return false;
+          return val.op === "up" ? d === 1 : d === -1;
+        }
+        case "earn": {
+          const d = row.earnDate;
+          if (!d) return false;
+          if (val.op === "any") return true;
+          const days = Math.round((Date.parse(d) - Date.now()) / 86400_000);
+          if (val.op === "week") return days >= 0 && days <= 7;
+          if (val.op === "nextweek") return days > 7 && days <= 14;
+          return days >= 0 && days <= 31;
+        }
+      }
+      return true;
+    }
+  }
+  return true;
+}
+
+function activeFilterEntries() {
+  return [...state.filters.entries()].filter(([id, v]) => {
+    const f = FILTER_BY_ID[id];
+    if (!f) return false;
+    if (f.type === "text") return String(v || "").trim() !== "";
+    if (f.type === "range") return v.min != null || v.max != null || !!v.neg;
+    if (f.type === "multi" || f.type === "rating") return v.size > 0;
+    if (f.type === "periodRange") return v.min != null || v.max != null;
+    return true;
+  });
+}
+
+function applyFilters(rows) {
+  const t0 = performance.now();
+  const entries = activeFilterEntries();
+  const marketOk = (r) => state.market === "all" || r.exch === state.market;
+  const wlOk = (r) => !state.wlOnly || state.watchlist.has(r.sym);
+  let out;
+  if (entries.length === 0) {
+    out = rows.filter((r) => marketOk(r) && wlOk(r));
+  } else {
+    out = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!marketOk(r) || !wlOk(r)) continue;
+      let ok = true;
+      for (const [id, v] of entries) {
+        if (!matchFilter(r, id, v)) { ok = false; break; }
+      }
+      if (ok) out.push(r);
+    }
+  }
+  state.lastMs = performance.now() - t0;
+  return out;
+}
+
+function sortVal(r, key) {
+  switch (key) {
+    case "assetTurn": return r.revenue != null && r.assets ? r.revenue / r.assets : null;
+    case "ndEbitda": return r.netDebt != null && r.ebitda > 0 ? r.netDebt / r.ebitda : null;
+    case "supertrend": return r.stDir == null ? null : r.stDir;
+    case "analyst": return r.analyst;
+    case "sym": return null; // symbol sorts via string path
+    default: return r[key];
+  }
+}
+
+function sortRows(rows) {
+  const { key, dir } = state.sort;
+  const mul = dir === "asc" ? 1 : -1;
+  if (key === "sym") {
+    rows.sort((a, b) => mul * (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0));
+    return;
+  }
+  rows.sort((a, b) => {
+    const va = sortVal(a, key), vb = sortVal(b, key);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;          // nulls always last
+    if (vb == null) return -1;
+    return mul * (va - vb);
+  });
+}
+
+/* ============================================================================
+   FILTER BAR (pills)
+   ========================================================================= */
+function pillValue(id) {
+  const f = FILTER_BY_ID[id];
+  const v = state.filters.get(id);
+  const fmtRange = (min, max, unit) => {
+    const a = min != null ? (f.fmt === "price" ? "₹" + inGroup(min) : f.fmt === "vol" ? fmtVol(min) : f.fmt === "cr" ? fmtCr(min * 1e7) : inGroup(min)) : "Any";
+    const b = max != null ? (f.fmt === "price" ? "₹" + inGroup(max) : f.fmt === "vol" ? fmtVol(max) : f.fmt === "cr" ? fmtCr(max * 1e7) : inGroup(max)) : "Any";
+    return `${a} – ${b}${unit && unit !== "₹" ? " " + unit : ""}`;
+  };
+  if (f.type === "text") return String(v || "");
+  if (f.type === "range") {
+    if (v.neg) return "Negative";
+    return fmtRange(v.min, v.max, f.unit);
+  }
+  if (f.type === "multi") return [...v].sort().join(", ") || "";
+  if (f.type === "rating") return [...v].sort((a, b) => TECH_VAL[a] - TECH_VAL[b]).join(", ") || "";
+  if (f.type === "periodRange") {
+    const pl = (f.periods.find((p) => p.id === v.period) || {}).label || "";
+    return `${pl}: ${fmtRange(v.min, v.max, "")}`;
+  }
+  if (f.type === "technical") {
+    if (f.variant === "maPos") return `${v.op === "above" ? "Above" : "Below"} ${f.maChoices.find((m) => m[0] === v.ma)?.[1] || ""}`;
+    return f.ops.find((o) => o[0] === v.op)?.[1] || "";
+  }
+  return "";
+}
+
+function renderFilterBar() {
+  const bar = $("filterBar");
+  const entries = activeFilterEntries();
+  let html = "";
+  for (const [id] of entries) {
+    const f = FILTER_BY_ID[id];
+    html += `<button class="pill active" data-id="${id}" aria-haspopup="true"><span class="name">${esc(f.label)}:</span><span class="val">${esc(pillValue(id))}</span><span class="x" data-x="${id}" title="Clear ${esc(f.label)}" role="button" aria-label="Clear">✕</span></button>`;
+  }
+  html += `<button class="pill add" id="btnAddFilter" aria-haspopup="true" title="Add filter">+</button>`;
+  html += `<span class="count-badge"><span class="dot"></span>${NF.format(state.filtered.length)} match${state.filtered.length === 1 ? "" : "es"}${state.lastMs != null ? ` <span class="ms">· ${state.lastMs.toFixed(0)} ms</span>` : ""}</span>`;
+  bar.innerHTML = html;
+  bar.querySelectorAll(".pill[data-id]").forEach((p) => {
+    p.addEventListener("click", (e) => {
+      if (e.target.dataset.x) return;
+      openPopup(p.dataset.id, p);
+    });
+  });
+  bar.querySelectorAll(".x[data-x]").forEach((x) => {
+    x.addEventListener("click", (e) => {
+      e.stopPropagation();
+      clearFilter(x.dataset.x);
+    });
+  });
+  const add = $("btnAddFilter");
+  add.addEventListener("click", () => openAddPopup(add));
+  updateHash();
+}
+
+function setFilter(id, value) {
+  state.filters.set(id, value);
+  state.lastFilterId = id;
+  refresh();
+}
+function clearFilter(id) {
+  state.filters.delete(id);
+  refresh();
+}
+function clearLastFilter() {
+  if (state.lastFilterId) { clearFilter(state.lastFilterId); return; }
+  if (state.filters.size) {
+    const first = state.filters.keys().next().value;
+    clearFilter(first);
+    return;
+  }
+  toast("No filters to clear");
+}
+
+/* ============================================================================
+   TABS + TABLE
+   ========================================================================= */
+function renderTabs() {
+  const row = $("tabsRow");
+  const gear = $("btnColSetup");
+  row.querySelectorAll(".tab").forEach((t) => t.remove());
+  for (const t of COLUMNS) {
+    const b = document.createElement("button");
+    b.className = "tab" + (t.tab === state.tab ? " active" : "");
+    b.textContent = t.tab;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(t.tab === state.tab));
+    b.addEventListener("click", () => { state.tab = t.tab; state.page = 1; renderTabs(); renderTable(); });
+    row.insertBefore(b, gear);
+  }
+}
+
+function tabCols() {
+  const t = COLUMNS.find((c) => c.tab === state.tab);
+  return t.cols.filter((c) => c.lock || !state.hiddenCols.has(c.id));
+}
+
+function cellHtml(r, col) {
+  const v = r[col.id];
+  switch (col.fmt) {
+    case "text": return `<td class="l muted">${esc(v ?? "—")}</td>`;
+    case "price": return `<td class="${cls(v)}">${fmtPrice(v)}</td>`;
+    case "cr": return `<td class="${cls(v)}">${fmtCr(v)}</td>`;
+    case "crplain": return `<td>${v != null ? "₹" + NF.format(Math.round(v)) + " Cr" : "—"}</td>`;
+    case "vol": return `<td>${fmtVol(v)}</td>`;
+    case "pct": return `<td class="${cls(v)}">${v == null ? "—" : NF2.format(v) + "%"}</td>`;
+    case "x": return `<td>${v == null ? "—" : NF2.format(v)}</td>`;
+    case "signed": return `<td class="${cls(v)}">${v == null ? "—" : NF2.format(v)}</td>`;
+    case "chgchip": return `<td>${v == null ? '<span class="muted">—</span>' : `<span class="chg-chip ${v >= 0 ? "pos" : "neg"}">${NF2.format(v)}%</span>`}</td>`;
+    case "rating": return `<td>${v == null ? '<span class="muted">—</span>' : `<span class="rating ${ratingClass(v)}"><span class="b"></span>${esc(v)}</span>`}</td>`;
+    case "stdir": return `<td>${v == null ? '<span class="muted">—</span>' : `<span class="rating ${v === "Up" ? "r-buy" : "r-sell"}"><span class="b"></span>${v}</span>`}</td>`;
+    default: return `<td class="${cls(v)}">${v == null ? "—" : esc(v)}</td>`;
+  }
+}
+
+function renderTable() {
+  const cols = tabCols();
+  const cg = $("cg");
+  const thead = $("thead");
+  const tbody = $("tbody");
+
+  cg.innerHTML = cols.map((c) => `<col style="width:${c.w}px">`).join("");
+  thead.innerHTML = "<tr>" + cols.map((c) => {
+    const sorted = state.sort.key === (c.sortKey || c.id);
+    const arr = sorted ? `<span class="arr">${state.sort.dir === "asc" ? "▲" : "▼"}</span>` : "";
+    return `<th class="${c.align === "l" ? "l" : ""}${sorted ? " sorted" : ""}" data-k="${c.sortKey || c.id}" style="${c.align === "l" ? "text-align:left;" : ""}" title="Sort by ${esc(c.label)}">${esc(c.label)}${arr}</th>`;
+  }).join("") + "</tr>";
+
+  const total = state.filtered.length;
+  const pages = Math.max(1, Math.ceil(total / state.pageSize));
+  if (state.page > pages) state.page = pages;
+  const start = (state.page - 1) * state.pageSize;
+  const pageRows = state.filtered.slice(start, start + state.pageSize);
+
+  let html = "";
+  for (const r of pageRows) {
+    const inWl = state.watchlist.has(r.sym);
+    html += `<tr data-sym="${esc(r.sym)}" class="${inWl ? "inWl" : ""}">`;
+    for (const c of cols) {
+      if (c.id === "sym") {
+        html += `<td class="l"><div class="symcell"><button class="wl ${inWl ? "on" : ""}" data-wl="${esc(r.sym)}" title="${inWl ? "Remove from" : "Add to"} watchlist" aria-label="Watchlist">${inWl ? "★" : "☆"}</button>${logoHtml(r.sym)}<div class="meta"><div class="t">${esc(r.sym)}</div><div class="n">${esc(r.name)}</div></div></div></td>`;
+      } else {
+        html += cellHtml(r, c);
+      }
+    }
+    html += "</tr>";
+  }
+  tbody.innerHTML = html || "";
+
+  // states
+  $("loadState").classList.add("hidden");
+  $("errState").classList.add("hidden");
+  const empty = total === 0 && state.rows.length > 0;
+  $("emptyState").classList.toggle("hidden", !empty);
+  $("grid").style.visibility = state.rows.length === 0 ? "hidden" : "visible";
+
+  // header sort handlers
+  thead.querySelectorAll("th[data-k]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.k;
+      if (state.sort.key === k) state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
+      else state.sort = { key: k, dir: "desc" };
+      refresh({ keepPage: true });
+    });
+  });
+  // watchlist toggles
+  tbody.querySelectorAll(".wl[data-wl]").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleWatchlist(b.dataset.wl);
+    });
+  });
+  // row → drawer
+  tbody.querySelectorAll("tr[data-sym]").forEach((tr) => {
+    tr.addEventListener("click", () => openDrawer(tr.dataset.sym));
+  });
+
+  renderPager(total, pages);
+  $("footCount").textContent = `${NF.format(total)} of ${NF.format(state.rows.length)} stocks`;
+}
+
+function renderPager(total, pages) {
+  const p = $("pager");
+  if (pages <= 1) { p.innerHTML = total ? `<span class="info">Page 1 of 1</span>` : ""; return; }
+  const cur = state.page;
+  const btn = (pg, label, opts = {}) =>
+    `<button ${opts.disabled ? "disabled" : ""} class="${opts.cur ? "cur" : ""}" data-pg="${pg}">${label}</button>`;
+  let html = btn(cur - 1, "‹", { disabled: cur <= 1 });
+  const win = [];
+  for (let i = 1; i <= pages; i++) {
+    if (i === 1 || i === pages || Math.abs(i - cur) <= 2) win.push(i);
+  }
+  let last = 0;
+  for (const i of win) {
+    if (i - last > 1) html += `<span class="info">…</span>`;
+    html += btn(i, NF.format(i), { cur: i === cur });
+    last = i;
+  }
+  html += btn(cur + 1, "›", { disabled: cur >= pages });
+  p.innerHTML = html;
+  p.querySelectorAll("button[data-pg]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const pg = Number(b.dataset.pg);
+      if (pg >= 1 && pg <= pages) { state.page = pg; renderTable(); $("tableWrap").scrollTop = 0; }
+    });
+  });
+}
+
+function refresh(opts = {}) {
+  if (!opts.keepPage) state.page = 1;
+  state.filtered = applyFilters(state.rows);
+  sortRows(state.filtered);
+  renderFilterBar();
+  renderTable();
+}
+
+/* ============================================================================
+   POPUPS — one open popup at a time; overlay captures outside clicks;
+   Enter applies, Esc closes. Live "N results" preview in every footer.
+   ========================================================================= */
+let popupEl = null;
+
+function closePopup() {
+  if (popupEl) { popupEl.remove(); popupEl = null; }
+  document.querySelectorAll(".overlay").forEach((o) => o.remove());
+}
+
+function makePopup(anchor, title, wide) {
+  closePopup();
+  const ov = document.createElement("div");
+  ov.className = "overlay";
+  ov.addEventListener("mousedown", closePopup);
+  const p = document.createElement("div");
+  p.className = "popup" + (wide ? " wide" : "");
+  p.innerHTML = `<div class="phead"><span class="t">${esc(title)}</span><button class="x" aria-label="Close">✕</button></div>`;
+  p.querySelector(".x").addEventListener("click", closePopup);
+  document.body.appendChild(ov);
+  document.body.appendChild(p);
+  const r = anchor.getBoundingClientRect();
+  const w = wide ? 380 : 320;
+  let left = Math.min(r.left, window.innerWidth - w - 12);
+  p.style.left = Math.max(8, left) + "px";
+  p.style.top = Math.min(r.bottom + 6, window.innerHeight - 120) + "px";
+  popupEl = p;
+  // Enter applies, Esc closes (spec: keyboard-first popups)
+  p.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const apply = p.querySelector('[data-act="apply"]');
+      if (apply) apply.click();
+    }
+  });
+  return p;
+}
+
+function pfoot(p, applyId, onApply, onClear, previewFn) {
+  const foot = document.createElement("div");
+  foot.className = "pfoot";
+  foot.innerHTML = `<span class="preview"></span><span class="grow"></span>
+    <button class="btn" data-act="clear">Clear</button>
+    <button class="btn primary" data-act="apply">Apply</button>`;
+  p.appendChild(foot);
+  const pv = foot.querySelector(".preview");
+  const upd = () => { const n = previewFn ? previewFn() : null; pv.innerHTML = n == null ? "" : `<b>${NF.format(n)}</b> results`; };
+  foot.querySelector('[data-act="apply"]').addEventListener("click", onApply);
+  foot.querySelector('[data-act="clear"]').addEventListener("click", onClear);
+  foot.querySelector('[data-act="apply"]').id = applyId || "";
+  p._updPreview = upd;
+  upd();
+  return foot;
+}
+
+/** Count rows matching CURRENT state plus one tentative filter (id, val). */
+function previewCount(id, val) {
+  const saved = state.filters.get(id);
+  state.filters.set(id, val);
+  const n = applyFilters(state.rows).length;
+  if (saved === undefined) state.filters.delete(id);
+  else state.filters.set(id, saved);
+  return n;
+}
+
+function boundsFor(field) {
+  if (state.bounds.has(field)) return state.bounds.get(field);
+  let lo = Infinity, hi = -Infinity;
+  for (const r of state.rows) {
+    const v = r[field];
+    if (v != null && Number.isFinite(v)) {
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+  }
+  const b = [Number.isFinite(lo) ? lo : 0, Number.isFinite(hi) ? hi : 100];
+  state.bounds.set(field, b);
+  return b;
+}
+
+/** Pretty step for slider ticks. */
+function niceStep(range) {
+  const raw = range / 100;
+  const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1e-9))));
+  const n = raw / mag;
+  return (n < 2 ? 1 : n < 5 ? 2 : 5) * mag;
+}
+function snap(v, step) { return Math.round(v / step) * step; }
+function dispVal(f, v) {
+  if (v == null || !Number.isFinite(v)) return "";
+  if (f.fmt === "price") return inGroup(v);
+  if (f.fmt === "vol") return inGroup(v);
+  if (f.fmt === "cr") return inGroup(v);
+  return NF2.format(v);
+}
+
+function buildRangeInputs(p, f, cur, onChange, field) {
+  const lo0 = cur.min, hi0 = cur.max;
+  p.insertAdjacentHTML("beforeend", `
+    <div class="row2">
+      <div><label class="f">Min${f.unit ? " (" + f.unit + ")" : ""}</label><input type="text" inputmode="decimal" id="rmin" placeholder="Any" value="${dispVal(f, lo0)}"></div>
+      <div><label class="f">Max${f.unit ? " (" + f.unit + ")" : ""}</label><input type="text" inputmode="decimal" id="rmax" placeholder="Any" value="${dispVal(f, hi0)}"></div>
+    </div>
+    <div class="err" id="rerr">Min must be ≤ Max</div>
+    <div class="slider" id="rslider"><div class="track"></div><div class="fill"></div>
+      <input type="range" id="rlo" min="0" max="1000" value="0" aria-label="Minimum slider">
+      <input type="range" id="rhi" min="0" max="1000" value="1000" aria-label="Maximum slider">
+    </div>`);
+  const [bmin, bmax] = boundsFor(field);
+  const step = niceStep(bmax - bmin);
+  const lo = p.querySelector("#rlo"), hi = p.querySelector("#rhi");
+  const fill = p.querySelector(".fill");
+  const inMin = p.querySelector("#rmin"), inMax = p.querySelector("#rmax");
+  const posToVal = (t) => snap(bmin + (t / 1000) * (bmax - bmin), step);
+  const valToPos = (v) => Math.max(0, Math.min(1000, Math.round(((v - bmin) / (bmax - bmin || 1)) * 1000)));
+
+  let tLo = lo0 != null ? valToPos(lo0) : 0;
+  let tHi = hi0 != null ? valToPos(hi0) : 1000;
+  const paint = () => {
+    const a = Math.min(tLo, tHi), b = Math.max(tLo, tHi);
+    lo.value = String(a); hi.value = String(b);
+    fill.style.left = (a / 10) + "%";
+    fill.style.width = ((b - a) / 10) + "%";
+  };
+  paint();
+  const emit = (fromSlider) => {
+    const mn = parseFloat(inMin.value.replace(/,/g, "")), mx = parseFloat(inMax.value.replace(/,/g, ""));
+    const bad = mn != null && mx != null && Number.isFinite(mn) && Number.isFinite(mx) && mn > mx;
+    p.querySelector("#rerr").classList.toggle("show", bad);
+    onChange({
+      min: Number.isFinite(mn) ? mn : null,
+      max: Number.isFinite(mx) ? mx : null,
+    }, !bad);
+  };
+  let deb;
+  const sliderEmit = () => {
+    const a = Math.min(tLo, tHi), b = Math.max(tLo, tHi);
+    inMin.value = a > 0 ? dispVal(f, posToVal(a)) : "";
+    inMax.value = b < 1000 ? dispVal(f, posToVal(b)) : "";
+    paint();
+    clearTimeout(deb);
+    deb = setTimeout(() => emit(true), 120);
+  };
+  lo.addEventListener("input", () => { tLo = Number(lo.value); if (tLo > tHi) tHi = tLo; sliderEmit(); });
+  hi.addEventListener("input", () => { tHi = Number(hi.value); if (tHi < tLo) tLo = tHi; sliderEmit(); });
+  inMin.addEventListener("input", () => {
+    const v = parseFloat(inMin.value.replace(/,/g, ""));
+    if (Number.isFinite(v)) { tLo = valToPos(v); paint(); }
+    emit(false);
+  });
+  inMax.addEventListener("input", () => {
+    const v = parseFloat(inMax.value.replace(/,/g, ""));
+    if (Number.isFinite(v)) { tHi = valToPos(v); paint(); }
+    emit(false);
+  });
+}
+
+function openPopup(id, anchor) {
+  const f = FILTER_BY_ID[id];
+  if (!f) return;
+  if (f.type === "range") openRangePopup(f, anchor);
+  else if (f.type === "text") openTextPopup(f, anchor);
+  else if (f.type === "multi") openMultiPopup(f, anchor);
+  else if (f.type === "rating") openRatingPopup(f, anchor);
+  else if (f.type === "periodRange") openPeriodRangePopup(f, anchor);
+  else if (f.type === "technical") openTechnicalPopup(f, anchor);
+}
+
+/* ---- pattern A: RANGE ---- */
+function openRangePopup(f, anchor) {
+  const cur = state.filters.get(f.id) || { min: null, max: null, neg: false };
+  const p = makePopup(anchor, f.label + (f.unit && f.unit !== "₹" && f.unit !== "%" ? " (" + f.unit + ")" : ""));
+  buildRangeInputs(p, f, cur, (val, ok) => { p._tentative = { ...val, neg: cur.neg && !val.min && !val.max }; p._updPreview(); }, f.field);
+  if (f.presets) {
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    chips.innerHTML = f.presets.map((pr, i) =>
+      `<button class="chip${cur.min === pr.min && cur.max === pr.max && cur.min != null ? " on" : ""}" data-i="${i}">${esc(pr.l)}</button>`).join("");
+    chips.querySelectorAll(".chip").forEach((c) => {
+      c.addEventListener("click", () => {
+        const pr = f.presets[Number(c.dataset.i)];
+        p.querySelector("#rmin").value = pr.min != null ? dispVal(f, pr.min) : "";
+        p.querySelector("#rmax").value = pr.max != null ? dispVal(f, pr.max) : "";
+        chips.querySelectorAll(".chip").forEach((x) => x.classList.remove("on"));
+        c.classList.add("on");
+        p._tentative = { ...pr, neg: false };
+        p._updPreview();
+      });
+    });
+    p.appendChild(chips);
+  }
+  if (f.neg) {
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    chips.innerHTML = `<button class="chip${cur.neg ? " on" : ""}" data-neg="1">${esc(f.neg)}</button>`;
+    chips.querySelector(".chip").addEventListener("click", (e) => {
+      const on = e.target.classList.toggle("on");
+      p._tentative = on ? { min: null, max: null, neg: true } : { min: null, max: null, neg: false };
+      p._updPreview();
+    });
+    p.appendChild(chips);
+  }
+  p._tentative = { ...cur };
+  pfoot(p, null,
+    () => { const t = p._tentative || {}; setFilter(f.id, { min: t.min ?? null, max: t.max ?? null, neg: !!t.neg }); closePopup(); },
+    () => { clearFilter(f.id); closePopup(); },
+    () => previewCount(f.id, p._tentative));
+  p.querySelector("input").focus();
+}
+
+/* ---- text ---- */
+function openTextPopup(f, anchor) {
+  const cur = state.filters.get(f.id) || "";
+  const p = makePopup(anchor, f.label);
+  p.insertAdjacentHTML("beforeend", `<label class="f">Contains</label><input type="text" id="txt" placeholder="e.g. TATA or Pharma" value="${esc(cur)}">`);
+  p._tentative = cur;
+  const inp = p.querySelector("#txt");
+  inp.addEventListener("input", () => { p._tentative = inp.value; p._updPreview(); });
+  pfoot(p, null,
+    () => { if (inp.value.trim()) setFilter(f.id, inp.value.trim()); closePopup(); },
+    () => { clearFilter(f.id); closePopup(); },
+    () => previewCount(f.id, inp.value));
+  inp.focus();
+}
+
+/* ---- pattern B: MULTI-SELECT ---- */
+function openMultiPopup(f, anchor) {
+  const cur = state.filters.get(f.id) || new Set();
+  const p = makePopup(anchor, f.label, true);
+  // option → count
+  let counts;
+  if (f.dynamic) {
+    counts = new Map();
+    for (const r of state.rows) {
+      const v = r[f.field];
+      if (v != null) counts.set(v, (counts.get(v) || 0) + 1);
+    }
+  } else if (f.bool) {
+    let yes = 0, no = 0;
+    for (const r of state.rows) {
+      const t = boolText(r[f.field]);
+      if (t === "Yes") yes++; else if (t === "No") no++;
+    }
+    counts = new Map([["Yes", yes], ["No", no]]);
+  } else {
+    counts = new Map(f.options.map((o) => [o, 0]));
+    for (const r of state.rows) {
+      const v = r[f.field];
+      if (v != null && counts.has(v)) counts.set(v, counts.get(v) + 1);
+    }
+  }
+  const opts = [...counts.entries()].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  p.insertAdjacentHTML("beforeend", `
+    <input class="search" type="text" placeholder="Search…" aria-label="Search options">
+    <div class="chips" style="margin:0 0 8px">
+      <button class="chip" data-all="1">Select All</button>
+      <button class="chip" data-none="1">Clear</button>
+    </div>
+    <div class="checklist"></div>`);
+  const list = p.querySelector(".checklist");
+  const search = p.querySelector(".search");
+  const sel = new Set(cur);
+  const paint = () => {
+    const q = search.value.trim().toLowerCase();
+    list.innerHTML = opts
+      .filter(([o]) => !q || o.toLowerCase().includes(q))
+      .map(([o, n]) => `<button class="ci ${sel.has(o) ? "on" : ""}" data-o="${esc(o)}"><span class="box">${sel.has(o) ? "✓" : ""}</span><span>${esc(o)}</span><span class="cnt">${f.bool ? "" : NF.format(n)}</span></button>`)
+      .join("");
+    list.querySelectorAll(".ci").forEach((ci) => {
+      ci.addEventListener("click", () => {
+        const o = ci.dataset.o;
+        if (sel.has(o)) sel.delete(o); else sel.add(o);
+        ci.classList.toggle("on", sel.has(o));
+        ci.querySelector(".box").textContent = sel.has(o) ? "✓" : "";
+        p._tentative = new Set(sel);
+        p._updPreview();
+      });
+    });
+  };
+  search.addEventListener("input", paint);
+  p.querySelector("[data-all]").addEventListener("click", () => { opts.forEach(([o]) => sel.add(o)); paint(); p._tentative = new Set(sel); p._updPreview(); });
+  p.querySelector("[data-none]").addEventListener("click", () => { sel.clear(); paint(); p._tentative = new Set(sel); p._updPreview(); });
+  paint();
+  p._tentative = new Set(sel);
+  pfoot(p, null,
+    () => { setFilter(f.id, new Set(sel)); closePopup(); },
+    () => { clearFilter(f.id); closePopup(); },
+    () => previewCount(f.id, new Set(sel)));
+  search.focus();
+}
+
+/* ---- pattern C: RATING scale ---- */
+function openRatingPopup(f, anchor) {
+  const cur = state.filters.get(f.id) || new Set();
+  const p = makePopup(anchor, f.label, true);
+  p.insertAdjacentHTML("beforeend", `<label class="f">Select one or more adjacent levels</label><div class="seg"></div>`);
+  const seg = p.querySelector(".seg");
+  const levels = f.levels;
+  const sel = new Set(cur);
+  const paint = () => {
+    seg.innerHTML = levels.map((l) => {
+      const sell = l.includes("Sell");
+      return `<button class="${sel.has(l) ? "on" : ""}${sell ? " sello" : ""}" data-l="${esc(l)}">${esc(l)}</button>`;
+    }).join("");
+    seg.querySelectorAll("button").forEach((b) => {
+      b.addEventListener("click", () => {
+        const l = b.dataset.l;
+        if (sel.has(l)) sel.delete(l);
+        else {
+          sel.add(l);
+          // keep the selection contiguous between min & max
+          const idx = levels.map((x, i) => (sel.has(x) ? i : -1)).filter((i) => i >= 0);
+          for (let i = Math.min(...idx); i <= Math.max(...idx); i++) sel.add(levels[i]);
+        }
+        paint();
+        p._tentative = new Set(sel);
+        p._updPreview();
+      });
+    });
+  };
+  paint();
+  p._tentative = new Set(sel);
+  pfoot(p, null,
+    () => { setFilter(f.id, new Set(sel)); closePopup(); },
+    () => { clearFilter(f.id); closePopup(); },
+    () => previewCount(f.id, new Set(sel)));
+}
+
+/* ---- pattern D: PERIOD + RANGE ---- */
+function openPeriodRangePopup(f, anchor) {
+  const cur = state.filters.get(f.id) || { period: f.periods[0].id, min: null, max: null };
+  const p = makePopup(anchor, f.label, true);
+  p.insertAdjacentHTML("beforeend", `
+    <label class="f">Period</label>
+    <div class="chips" id="periods" style="margin:0 0 4px">${f.periods.map((pd) => `<button class="chip${pd.id === cur.period ? " on" : ""}" data-p="${pd.id}">${esc(pd.label)}</button>`).join("")}</div>`);
+  const holder = document.createElement("div");
+  p.appendChild(holder);
+  const chips = document.createElement("div");
+  chips.className = "chips";
+  p.appendChild(chips);
+  const paintChips = (period) => {
+    chips.innerHTML = (f.presets || []).map((pr, i) => `<button class="chip" data-i="${i}">${esc(pr.l)}</button>`).join("");
+    chips.querySelectorAll(".chip").forEach((c) => {
+      c.addEventListener("click", () => {
+        const pr = f.presets[Number(c.dataset.i)];
+        holder.querySelector("#rmin").value = pr.min != null ? dispVal({ fmt: null }, pr.min) : "";
+        holder.querySelector("#rmax").value = pr.max != null ? dispVal({ fmt: null }, pr.max) : "";
+        chips.querySelectorAll(".chip").forEach((x) => x.classList.remove("on"));
+        c.classList.add("on");
+        p._tentative = { period, ...pr };
+        p._updPreview();
+      });
+    });
+  };
+  const paintInputs = (period) => {
+    holder.innerHTML = "";
+    const fakeF = { field: period, unit: f.unit, fmt: null };
+    buildRangeInputs(holder, fakeF, { min: cur.period === period ? cur.min : null, max: cur.period === period ? cur.max : null },
+      (val, ok) => { if (ok) { p._tentative = { period, ...val }; p._updPreview(); } }, period);
+    paintChips(period);
+  };
+  p.querySelector("#periods").querySelectorAll(".chip").forEach((c) => {
+    c.addEventListener("click", () => {
+      p.querySelector("#periods").querySelectorAll(".chip").forEach((x) => x.classList.remove("on"));
+      c.classList.add("on");
+      paintInputs(c.dataset.p);
+    });
+  });
+  paintInputs(cur.period);
+  p._tentative = { ...cur };
+  pfoot(p, null,
+    () => { const t = p._tentative || { period: cur.period }; setFilter(f.id, { period: t.period, min: t.min ?? null, max: t.max ?? null }); closePopup(); },
+    () => { clearFilter(f.id); closePopup(); },
+    () => previewCount(f.id, p._tentative));
+}
+
+/* ---- pattern E: TECHNICAL / comparison ---- */
+function openTechnicalPopup(f, anchor) {
+  const cur = state.filters.get(f.id);
+  const p = makePopup(anchor, f.label, true);
+  const applySimple = (fields) => {
+    p.insertAdjacentHTML("beforeend", fields);
+  };
+  if (f.variant === "maPos") {
+    const v = cur || { op: "above", ma: "sma50" };
+    applySimple(`
+      <label class="f">Price is</label>
+      <div class="seg" id="opseg">
+        <button class="${v.op === "above" ? "on" : ""}" data-v="above">Above</button>
+        <button class="${v.op === "below" ? "on" : ""}" data-v="below">Below</button>
+      </div>
+      <label class="f">Moving average</label>
+      <select id="ma">${f.maChoices.map(([id, l]) => `<option value="${id}"${v.ma === id ? " selected" : ""}>${l}</option>`).join("")}</select>`);
+    p._tentative = { ...v };
+    p.querySelector("#opseg").querySelectorAll("button").forEach((b) => {
+      b.addEventListener("click", () => {
+        p.querySelector("#opseg").querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        p._tentative = { ...p._tentative, op: b.dataset.v };
+        p._updPreview();
+      });
+    });
+    p.querySelector("#ma").addEventListener("change", (e) => { p._tentative = { ...p._tentative, ma: e.target.value }; p._updPreview(); });
+  } else if (f.variant === "earn") {
+    const v = cur || { op: "week" };
+    applySimple(`<label class="f">Earnings scheduled</label>
+      <div class="seg" id="opseg" style="flex-wrap:wrap">
+        ${f.ops.map(([id, l]) => `<button class="${v.op === id ? "on" : ""}" data-v="${id}">${esc(l)}</button>`).join("")}
+      </div>`);
+    p._tentative = { ...v };
+  } else {
+    const v = cur || { op: f.ops[0][0] };
+    applySimple(`<label class="f">Condition</label>
+      <div class="seg" id="opseg" style="flex-wrap:wrap">
+        ${f.ops.map(([id, l]) => `<button class="${v.op === id ? "on" : ""}" data-v="${id}">${esc(l)}</button>`).join("")}
+      </div>`);
+    p._tentative = { ...v };
+  }
+  p.querySelectorAll("#opseg button").forEach((b) => {
+    b.addEventListener("click", () => {
+      p.querySelectorAll("#opseg button").forEach((x) => x.classList.remove("on"));
+      b.classList.add("on");
+      p._tentative = { ...(p._tentative || {}), op: b.dataset.v };
+      p._updPreview();
+    });
+  });
+  pfoot(p, null,
+    () => { setFilter(f.id, { ...p._tentative }); closePopup(); },
+    () => { clearFilter(f.id); closePopup(); },
+    () => previewCount(f.id, p._tentative));
+}
+
+/* ---- add-filter searchable menu ---- */
+function openAddPopup(anchor) {
+  const p = makePopup(anchor, "Add filter", true);
+  const cats = [...new Set(FILTERS.map((f) => f.cat))];
+  p.insertAdjacentHTML("beforeend", `<input class="search" type="text" placeholder="Search filters…" aria-label="Search filters"><div class="checklist" id="addlist" style="max-height:300px"></div>`);
+  const list = p.querySelector("#addlist");
+  const search = p.querySelector(".search");
+  const paint = () => {
+    const q = search.value.trim().toLowerCase();
+    let html = "";
+    for (const cat of cats) {
+      const fs = FILTERS.filter((f) => f.cat === cat && (!q || f.label.toLowerCase().includes(q)));
+      if (!fs.length) continue;
+      html += `<div class="mhead">${esc(cat)}</div>`;
+      for (const f of fs) {
+        const on = state.filters.has(f.id);
+        html += `<button class="ci ${on ? "on" : ""}" data-f="${f.id}"><span class="box">${on ? "✓" : ""}</span><span>${esc(f.label)}</span></button>`;
+      }
+    }
+    list.innerHTML = html || `<div class="empty">No filters match “${esc(search.value)}”</div>`;
+    list.querySelectorAll(".ci[data-f]").forEach((ci) => {
+      ci.addEventListener("click", () => {
+        closePopup();
+        const id = ci.dataset.f;
+        if (!state.filters.has(id)) {
+          const f = FILTER_BY_ID[id];
+          if (f.type === "range") setFilter(id, { min: null, max: null, neg: false });
+          else if (f.type === "periodRange") setFilter(id, { period: f.periods[0].id, min: null, max: null });
+          else if (f.type === "multi" || f.type === "rating") setFilter(id, new Set());
+          else if (f.type === "text") setFilter(id, "");
+          else setFilter(id, { op: (f.ops && f.ops[0][0]) || "above", ...(f.variant === "maPos" ? { ma: "sma50" } : {}) });
+        }
+        // reopen the filter's own popup (on its pill, or on the + button
+        // when the filter is still empty and has no pill yet)
+        requestAnimationFrame(() => {
+          const pill = document.querySelector(`.pill[data-id="${id}"]`);
+          openPopup(id, pill || anchor);
+        });
+      });
+    });
+  };
+  search.addEventListener("input", paint);
+  paint();
+  search.focus();
+}
+
+/* ============================================================================
+   DRAWER — full stock details
+   ========================================================================= */
+const DRAWER_GROUPS = [
+  ["Market Data", [["price", "Price", "price"], ["open", "Open", "price"], ["high", "Day High", "price"], ["low", "Day Low", "price"], ["prev", "Prev Close", "price"], ["chgPct", "Change %", "pct"], ["mcap", "Market Cap", "cr"], ["ev", "Enterprise Value", "cr"], ["sharesOut", "Shares Out", "vol"], ["mcapCls", "Mkt Cap Class", "text"], ["sector", "Sector", "text"], ["industry", "Industry", "text"]]],
+  ["Price & Volume", [["vol", "Volume", "vol"], ["relVol", "Rel Volume", "x"], ["avgVol20", "Avg Vol 20D", "vol"], ["avgVol50", "Avg Vol 50D", "vol"], ["valCr", "Value Traded", "cr"], ["gapPct", "Gap %", "pct"], ["hi52", "52W High", "price"], ["lo52", "52W Low", "price"], ["fromHi", "From 52W High", "pct"], ["fromLo", "From 52W Low", "pct"], ["fromAth", "From ATH", "pct"]]],
+  ["Valuation", [["pe", "P/E", "x"], ["fwdPe", "Forward P/E", "x"], ["peg", "PEG", "x"], ["pb", "P/B", "x"], ["ps", "P/S", "x"], ["evEbitda", "EV/EBITDA", "x"], ["evRev", "EV/Revenue", "x"], ["pCf", "Price/CFO", "x"], ["pFcf", "Price/FCF", "x"], ["bvps", "Book Value", "price"]]],
+  ["Dividends", [["divYld", "Div Yield", "pct"], ["dps", "Div / Share", "price"], ["payout", "Payout Ratio", "pct"]]],
+  ["Profitability", [["grossM", "Gross Margin", "pct"], ["opM", "Operating Margin", "pct"], ["netM", "Net Margin", "pct"], ["ebitdaM", "EBITDA Margin", "pct"], ["roe", "ROE", "pct"], ["roa", "ROA", "pct"]]],
+  ["Growth", [["revQoQ", "Revenue QoQ", "pct"], ["revYoY", "Revenue YoY", "pct"], ["revCagr3", "Rev CAGR 3Y", "pct"], ["revCagr5", "Rev CAGR 5Y", "pct"], ["epsQoQ", "EPS QoQ", "pct"], ["epsYoY", "EPS YoY", "pct"], ["epsCagr3", "EPS CAGR 3Y", "pct"], ["profitYoY", "Profit YoY", "pct"]]],
+  ["Financial Health", [["de", "Debt / Equity", "x"], ["currentR", "Current Ratio", "x"], ["quickR", "Quick Ratio", "x"], ["netDebt", "Net Debt", "cr"], ["totalDebt", "Total Debt", "cr"], ["cash", "Cash", "cr"]]],
+  ["Income Statement", [["revenue", "Revenue", "cr"], ["grossProfit", "Gross Profit", "cr"], ["opIncome", "Operating Income", "cr"], ["ebitda", "EBITDA", "cr"], ["netIncome", "Net Income", "cr"], ["eps", "EPS (TTM)", "price"]]],
+  ["Balance Sheet", [["assets", "Total Assets", "cr"], ["liabilities", "Total Liabilities", "cr"], ["equity", "Equity", "cr"], ["bvps", "Book Value / Share", "price"]]],
+  ["Cash Flow", [["ocf", "Operating CF", "cr"], ["icf", "Investing CF", "cr"], ["fcf", "Free Cash Flow", "cr"], ["fcfM", "FCF Margin", "pct"]]],
+  ["Performance", [["perf1D", "1D", "pct"], ["perf1W", "1W", "pct"], ["perf1M", "1M", "pct"], ["perf3M", "3M", "pct"], ["perf6M", "6M", "pct"], ["perfYTD", "YTD", "pct"], ["perf1Y", "1Y", "pct"], ["perf3Y", "3Y", "pct"], ["perf5Y", "5Y", "pct"], ["volatM", "Volatility 1M", "pct"], ["volatW", "Volatility 1W", "pct"], ["beta", "Beta 1Y", "x"], ["atr14", "ATR (14)", "price"], ["atrPct", "ATR %", "pct"]]],
+  ["Technicals", [["tech", "Technical Rating", "text"], ["osc", "Oscillators", "text"], ["maR", "Moving Averages", "text"], ["rsi14", "RSI (14)", "x"], ["wRsi", "RSI Weekly", "x"], ["stochK", "Stoch %K", "x"], ["stochD", "Stoch %D", "x"], ["adx", "ADX (14)", "x"], ["cci20", "CCI (20)", "x"], ["willR", "Williams %R", "x"], ["uo", "Ultimate Osc", "x"], ["ao", "Awesome Osc", "x"], ["mom10", "Momentum 10D", "pct"], ["macd", "MACD", "x"], ["macdSig", "MACD Signal", "x"], ["macdHist", "MACD Hist", "x"], ["bbB", "Bollinger %B", "x"], ["bbW", "Bollinger Width", "pct"], ["sma10", "SMA 10", "price"], ["sma20", "SMA 20", "price"], ["sma50", "SMA 50", "price"], ["sma100", "SMA 100", "price"], ["sma200", "SMA 200", "price"], ["ema10", "EMA 10", "price"], ["ema20", "EMA 20", "price"], ["ema50", "EMA 50", "price"], ["ema100", "EMA 100", "price"], ["ema200", "EMA 200", "price"], ["dist20", "vs SMA 20", "pct"], ["dist50", "vs SMA 50", "pct"], ["dist200", "vs SMA 200", "pct"], ["supertrend", "Supertrend", "stdir"], ["stVal", "Supertrend Value", "price"], ["tight20", "20D Tightness", "pct"]]],
+  ["Analyst", [["analyst", "Consensus", "analyst"], ["target", "Price Target", "price"], ["upside", "Upside", "pct"], ["nAnalysts", "Analysts", "num0"], ["earnDate", "Next Earnings", "date"]]],
+];
+
+function fmtByKind(v, kind) {
+  if (v == null) return "—";
+  switch (kind) {
+    case "price": return fmtPrice(v);
+    case "cr": return "₹" + fmtCr(v);
+    case "vol": return fmtVol(v);
+    case "pct": return NF2.format(v) + "%";
+    case "x": return NF2.format(v);
+    case "num0": return inGroup(v);
+    case "date": return fmtDate(v);
+    case "analyst": return analystLabel(v) + " (" + NF1.format(v) + ")";
+    case "stdir": return v === 1 || v === "Up" ? "Up" : "Down";
+    default: return esc(v);
+  }
+}
+
+function openDrawer(sym) {
+  const r = state.rows.find((x) => x.sym === sym);
+  if (!r) return;
+  const inWl = state.watchlist.has(sym);
+  $("dhead").innerHTML = `${logoHtml(sym, 34)}<div><div class="t">${esc(sym)}</div><div class="n">${esc(r.name)} · ${esc(r.exch)}${r.fno ? " · F&O" : ""}${r.n50 ? " · Nifty 50" : ""}</div>
+    <div style="margin-top:4px"><span class="chg-chip ${r.chgPct >= 0 ? "pos" : "neg"}">${r.chgPct == null ? "—" : NF2.format(r.chgPct) + "%"}</span>
+    <b style="color:var(--text);font-size:14px">${fmtPrice(r.price)}</b></div></div>`;
+  let html = "";
+  for (const [gname, fields] of DRAWER_GROUPS) {
+    html += `<div class="grp"><h4>${esc(gname)}</h4><div class="kv">`;
+    for (const [k, label, kind] of fields) {
+      const v = r[k];
+      html += `<div class="row"><span class="k">${esc(label)}</span><span class="v ${kind === "pct" || kind === "signed" ? cls(v) : ""}">${fmtByKind(v, kind)}</span></div>`;
+    }
+    html += `</div></div>`;
+  }
+  $("dbody").innerHTML = html;
+  const wlBtn = $("dWl");
+  wlBtn.textContent = inWl ? "★ Remove from Watchlist" : "☆ Add to Watchlist";
+  wlBtn.onclick = () => { toggleWatchlist(sym); openDrawer(sym); };
+  $("dChart").href = `https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(sym)}`;
+  $("drawer").classList.add("open");
+  $("drawer").setAttribute("aria-hidden", "false");
+}
+function closeDrawer() {
+  $("drawer").classList.remove("open");
+  $("drawer").setAttribute("aria-hidden", "true");
+}
+
+/* ============================================================================
+   WATCHLIST · SCREENS · PRESETS · CSV · HASH · THEME
+   ========================================================================= */
+function saveWatchlist() { localStorage.setItem(LS.watchlist, JSON.stringify([...state.watchlist])); }
+function toggleWatchlist(sym) {
+  if (state.watchlist.has(sym)) state.watchlist.delete(sym);
+  else state.watchlist.add(sym);
+  saveWatchlist();
+  $("wlCount").textContent = state.watchlist.size ? `(${state.watchlist.size})` : "";
+  renderTable();
+}
+
+function serializeFilters() {
+  return [...state.filters.entries()].map(([id, v]) => {
+    const f = FILTER_BY_ID[id];
+    if (!f) return null;
+    if (v instanceof Set) return [id, [...v]];
+    if (f.type === "text") return [id, v];
+    return [id, v];
+  }).filter(Boolean);
+}
+function deserializeFilters(arr) {
+  const m = new Map();
+  for (const [id, v] of arr || []) {
+    const f = FILTER_BY_ID[id];
+    if (!f) continue;
+    if (f.type === "multi" || f.type === "rating") m.set(id, new Set(v));
+    else m.set(id, v);
+  }
+  return m;
+}
+function screenState() {
+  return { f: serializeFilters(), sort: { ...state.sort }, tab: state.tab, page: state.page, pageSize: state.pageSize, market: state.market };
+}
+function applyScreenState(s) {
+  state.filters = deserializeFilters(s.f);
+  if (s.sort) state.sort = { ...s.sort };
+  if (s.tab && COLUMNS.some((c) => c.tab === s.tab)) state.tab = s.tab;
+  if (s.pageSize) state.pageSize = s.pageSize;
+  if (s.market) state.market = s.market;
+  state.page = 1;
+  renderTabs();
+  refresh();
+}
+
+let hashTimer = null;
+function updateHash() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => {
+    const s = screenState();
+    const hasFilters = s.f.length > 0 || (s.sort && (s.sort.key !== "mcap" || s.sort.dir !== "desc"));
+    const h = hasFilters ? "#s=" + btoa(unescape(encodeURIComponent(JSON.stringify(s)))) : "";
+    try { history.replaceState(null, "", location.pathname + h); } catch {}
+  }, 300);
+}
+function loadFromHash() {
+  const m = location.hash.match(/#s=(.+)/);
+  if (!m) return false;
+  try {
+    const s = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+    applyScreenState(s);
+    return true;
+  } catch { return false; }
+}
+
+/* ---- screens (localStorage) ---- */
+function getScreens() { return JSON.parse(localStorage.getItem(LS.screens) || "{}"); }
+function saveScreens(o) { localStorage.setItem(LS.screens, JSON.stringify(o)); }
+
+function openScreensMenu(anchor) {
+  const p = makePopup(anchor, "My Screens", true);
+  const screens = getScreens();
+  let html = `<input class="search" id="scrSearch" type="text" placeholder="Save current screen as…">
+    <div class="chips" style="margin:0 0 8px"><button class="chip" id="scrSave">Save Screen</button></div>
+    <div class="sep"></div>`;
+  const names = Object.keys(screens).sort();
+  html += names.length
+    ? names.map((n) => `<div class="mi" data-n="${esc(n)}"><span><span class="t">${esc(n)}</span><span class="d">${screens[n].f?.length || 0} filter(s) · ${esc(screens[n].tab || "Overview")}</span></span><span><button class="x" data-rn="${esc(n)}" title="Rename">✎</button> <button class="x" data-del="${esc(n)}" title="Delete">✕</button></span></div>`).join("")
+    : `<div class="empty">No saved screens yet. Set filters, then save.</div>`;
+  p.insertAdjacentHTML("beforeend", html);
+  const nameIn = p.querySelector("#scrSearch");
+  p.querySelector("#scrSave").addEventListener("click", () => {
+    const name = nameIn.value.trim();
+    if (!name) { toast("Type a name first"); nameIn.focus(); return; }
+    const o = getScreens();
+    o[name] = screenState();
+    saveScreens(o);
+    toast(`Screen “${name}” saved`);
+    closePopup();
+  });
+  p.querySelectorAll("[data-n]").forEach((mi) => {
+    mi.addEventListener("click", (e) => {
+      if (e.target.dataset.del || e.target.dataset.rn) return;
+      applyScreenState(getScreens()[mi.dataset.n]);
+      closePopup();
+      toast(`Loaded “${mi.dataset.n}”`);
+    });
+  });
+  p.querySelectorAll("[data-del]").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const o = getScreens();
+      delete o[b.dataset.del];
+      saveScreens(o);
+      b.closest(".mi").remove();
+      toast("Screen deleted");
+    });
+  });
+  p.querySelectorAll("[data-rn]").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const old = b.dataset.rn;
+      const nn = prompt("Rename screen", old);
+      if (!nn || !nn.trim()) return;
+      const o = getScreens();
+      o[nn.trim()] = o[old];
+      delete o[old];
+      saveScreens(o);
+      closePopup();
+      toast("Renamed");
+    });
+  });
+  nameIn.focus();
+}
+
+/* ---- preset templates ---- */
+const PRESETS = [
+  { name: "Top Gainers", def: { f: [["chgPct", { min: 0.01, max: null, neg: false }]], sort: { key: "perf1D", dir: "desc" }, tab: "Overview" } },
+  { name: "Top Losers", def: { f: [["chgPct", { min: null, max: -0.01, neg: false }]], sort: { key: "perf1D", dir: "asc" }, tab: "Overview" } },
+  { name: "Volume Shockers", def: { f: [["relVol", { min: 2, max: null, neg: false }]], sort: { key: "valCr", dir: "desc" }, tab: "Overview" } },
+  { name: "52-Week High Breakouts", def: { f: [["fromHi", { min: null, max: 0.5, neg: false }]], sort: { key: "mcap", dir: "desc" }, tab: "Overview" } },
+  { name: "Oversold (RSI < 30)", def: { f: [["rsi14", { min: null, max: 30, neg: false }]], sort: { key: "rsi14", dir: "asc" }, tab: "Technicals" } },
+  { name: "Golden Cross (SMA20 > SMA50)", def: { f: [["golden", new Set(["Yes"])]], sort: { key: "perf3M", dir: "desc" }, tab: "Technicals" } },
+  { name: "Low P/E + High ROE", def: { f: [["pe", { min: 0.01, max: 15, neg: false }], ["roe", { min: 15, max: null, neg: false }]], sort: { key: "roe", dir: "desc" }, tab: "Valuation" } },
+  { name: "High Dividend Yield", def: { f: [["divYld", { min: 2, max: null, neg: false }]], sort: { key: "divYld", dir: "desc" }, tab: "Dividends" } },
+  { name: "Debt-Free Midcaps", def: { f: [["de", { min: null, max: 0.05, neg: false }], ["mcapCls", new Set(["Mid Cap"])]], sort: { key: "mcap", dir: "desc" }, tab: "Balance Sheet" } },
+  { name: "Tight Range / VCP Candidates", def: { f: [["tight20", { min: null, max: 6, neg: false }], ["relVol", { min: 1.5, max: null, neg: false }], ["price", { min: 50, max: null, neg: false }]], sort: { key: "perf6M", dir: "desc" }, tab: "Technicals" } },
+];
+function openPresetsMenu(anchor) {
+  const p = makePopup(anchor, "Preset Screens");
+  p.insertAdjacentHTML("beforeend", PRESETS.map((pr) => `<button class="mi" data-i="${pr.name}"><span class="t">${esc(pr.name)}</span></button>`).join(""));
+  p.querySelectorAll("[data-i]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const pr = PRESETS.find((x) => x.name === b.dataset.i);
+      applyScreenState({ ...pr.def, market: state.market });
+      closePopup();
+      toast(`${pr.name} — ${NF.format(state.filtered.length)} matches`);
+    });
+  });
+}
+
+/* ---- watchlist menu ---- */
+function openWatchlistMenu(anchor) {
+  const p = makePopup(anchor, "Watchlist", true);
+  const syms = [...state.watchlist];
+  p.insertAdjacentHTML("beforeend", syms.length
+    ? syms.map((s) => {
+        const r = state.rows.find((x) => x.sym === s);
+        return `<button class="mi" data-go="${esc(s)}"><span><span class="t">${esc(s)}</span><span class="d">${esc(r ? r.name : "")}</span></span><span class="x" data-rm="${esc(s)}">✕</span></button>`;
+      }).join("")
+    : `<div class="empty">Star stocks in the table to build your watchlist.</div>`);
+  if (syms.length) {
+    p.insertAdjacentHTML("beforeend", `<div class="sep"></div><button class="mi" id="wlView"><span class="t">Show watchlist in table</span></button>`);
+    p.querySelector("#wlView").addEventListener("click", () => {
+      state.wlOnly = !state.wlOnly;
+      $("btnWatchlist").classList.toggle("on", state.wlOnly);
+      refresh();
+      closePopup();
+    });
+  }
+  p.querySelectorAll("[data-go]").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      if (e.target.dataset.rm) return;
+      openDrawer(b.dataset.go);
+      closePopup();
+    });
+  });
+  p.querySelectorAll("[data-rm]").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleWatchlist(b.dataset.rm);
+      openWatchlistMenu(anchor);
+    });
+  });
+}
+
+/* ---- CSV export ---- */
+function exportCsv() {
+  if (!state.filtered.length) { toast("Nothing to export"); return; }
+  const cols = tabCols();
+  const head = cols.map((c) => c.label);
+  const q = (v) => {
+    if (v == null) return "";
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [head.join(",")];
+  for (const r of state.filtered) {
+    lines.push(cols.map((c) => {
+      if (c.id === "sym") return r.sym;
+      const v = c.csv ? c.csv(r) : r[c.id];
+      return typeof v === "number" ? v : q(v);
+    }).join(","));
+  }
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `tradepulse-screener-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`Exported ${NF.format(state.filtered.length)} rows`);
+}
+
+/* ---- column setup ---- */
+function openColSetup(anchor) {
+  const p = makePopup(anchor, "Column settings", true);
+  let html = `<div class="checklist" style="max-height:320px">`;
+  for (const t of COLUMNS) {
+    html += `<div class="mhead">${esc(t.tab)}</div>`;
+    for (const c of t.cols) {
+      if (c.lock) continue;
+      const hidden = state.hiddenCols.has(c.id);
+      html += `<button class="ci ${hidden ? "" : "on"}" data-c="${c.id}"><span class="box">${hidden ? "" : "✓"}</span><span>${esc(c.label)}</span><span class="cnt">${esc(t.tab)}</span></button>`;
+    }
+  }
+  html += `</div><div class="chips" style="margin-top:8px"><button class="chip" id="colReset">Reset to defaults</button></div>`;
+  p.insertAdjacentHTML("beforeend", html);
+  p.querySelectorAll(".ci[data-c]").forEach((ci) => {
+    ci.addEventListener("click", () => {
+      const id = ci.dataset.c;
+      if (state.hiddenCols.has(id)) state.hiddenCols.delete(id); else state.hiddenCols.add(id);
+      localStorage.setItem(LS.hidden, JSON.stringify([...state.hiddenCols]));
+      ci.classList.toggle("on", !state.hiddenCols.has(id));
+      ci.querySelector(".box").textContent = state.hiddenCols.has(id) ? "" : "✓";
+      renderTable();
+    });
+  });
+  p.querySelector("#colReset").addEventListener("click", () => {
+    state.hiddenCols.clear();
+    localStorage.setItem(LS.hidden, "[]");
+    closePopup();
+    renderTable();
+    toast("Columns reset");
+  });
+}
+
+/* ---- theme ---- */
+function applyTheme(t) {
+  state.theme = t;
+  document.documentElement.setAttribute("data-theme", t);
+  localStorage.setItem(LS.theme, t);
+  $("btnTheme").textContent = t === "light" ? "🌙" : "☀️";
+}
+
+/* ============================================================================
+   INIT
+   ========================================================================= */
+async function init() {
+  // theme: ?theme= param wins, then storage, then LIGHT (matches the app)
+  const themeParam = new URLSearchParams(location.search).get("theme");
+  applyTheme(themeParam === "dark" ? "dark" : themeParam === "light" ? "light" : (localStorage.getItem(LS.theme) || "light"));
+
+  $("btnTheme").addEventListener("click", () => applyTheme(state.theme === "light" ? "dark" : "light"));
+  $("btnReset").addEventListener("click", () => {
+    state.filters.clear();
+    state.wlOnly = false;
+    $("btnWatchlist").classList.remove("on");
+    state.sort = { key: "mcap", dir: "desc" };
+    refresh();
+    toast("Filters reset");
+  });
+  $("btnExport").addEventListener("click", exportCsv);
+  $("btnScreens").addEventListener("click", () => openScreensMenu($("btnScreens")));
+  $("btnPresets").addEventListener("click", () => openPresetsMenu($("btnPresets")));
+  $("btnWatchlist").addEventListener("click", () => openWatchlistMenu($("btnWatchlist")));
+  $("btnColSetup").addEventListener("click", () => openColSetup($("btnColSetup")));
+  $("btnClearLast").addEventListener("click", clearLastFilter);
+  $("btnRetry").addEventListener("click", () => { DataAdapter._cache = null; init(); });
+  $("drawerClose").addEventListener("click", closeDrawer);
+  $("pageSize").addEventListener("change", (e) => { state.pageSize = Number(e.target.value); state.page = 1; renderTable(); });
+  $("market").addEventListener("change", (e) => {
+    state.market = e.target.value;
+    if (e.target.selectedIndex === 2) { e.target.selectedIndex = 0; state.market = "all"; toast("BSE listings are coming soon — showing the NSE universe"); }
+    refresh();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closePopup(); closeDrawer(); }
+  });
+  $("wlCount").textContent = state.watchlist.size ? `(${state.watchlist.size})` : "";
+
+  try {
+    const data = await DataAdapter.getUniverse();
+    state.rows = data.universe || [];
+    const when = data.updated ? new Date(data.updated) : null;
+    $("asOf").textContent = data.asOf
+      ? `NSE EOD ${new Date(data.asOf + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })}${when ? " · " + when.toLocaleString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }) + " IST" : ""}`
+      : "";
+    if (!loadFromHash()) { renderTabs(); refresh(); }
+  } catch (err) {
+    $("loadState").classList.add("hidden");
+    $("errState").classList.remove("hidden");
+    $("errMsg").textContent = (err && err.message) || "The screener feed is unavailable. Try again in a minute.";
+  }
+}
+init();
+</script>
+</body>
+</html>

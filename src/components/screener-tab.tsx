@@ -1,29 +1,51 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Bookmark, BookmarkPlus, ChevronDown, Layers, Radar, Search, Star, Trash2, X,
+  Bookmark, BookmarkPlus, ChevronDown, Layers, Radar, Star, Trash2, X,
 } from "lucide-react";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist";
-import {
-  Pager,
-  ResultsTable,
-  SORTS,
-  type StocksResponse,
-  csvDate,
-  exportCsv,
-} from "@/components/screener-tables";
+import { csvDate, exportCsv } from "@/components/screener-tables";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /** How many table rows render before the "Show more" button (full result stays reachable). */
 const TABLE_PAGE = 100;
+
+/**
+ * The quick filter is the full TradingView-style screener (public/screener.html)
+ * — declarative filter pills, 10 column tabs, presets, saved screens, CSV and
+ * watchlist — fed entirely from TradePulse's own database via
+ * /api/screener/universe. Embedding it as an iframe keeps the single-file
+ * deliverable self-contained while inheriting the app's auth context (same
+ * origin). Legacy quick-filter saved screens (kind="filters") map onto the
+ * screener's URL-hash state so old bookmarks keep working.
+ */
+const LEGACY_SORT_MAP: Record<string, string> = {
+  marketCap: "mcap", price: "price", changePct: "chgPct", volume: "vol",
+  rsi14: "rsi14", mom1M: "perf1M", mom3M: "perf3M", mom6M: "perf6M",
+  fromHighPct: "fromHi", fromLowPct: "fromLo",
+};
+
+function screenerHash(def: { q?: unknown; sector?: unknown; sort?: unknown; dir?: unknown }): string {
+  const f: [string, unknown][] = [];
+  if (typeof def.q === "string" && def.q.trim()) f.push(["q", def.q.trim()]);
+  if (typeof def.sector === "string" && def.sector && def.sector !== "all") f.push(["sector", [def.sector]]);
+  const legacySort = typeof def.sort === "string" ? LEGACY_SORT_MAP[def.sort] : undefined;
+  const st = {
+    f,
+    sort: { key: legacySort ?? "mcap", dir: def.dir === "asc" ? "asc" : "desc" },
+    tab: "Overview",
+    market: "NSE",
+  };
+  return "#s=" + btoa(unescape(encodeURIComponent(JSON.stringify(st))));
+}
 
 // ================================================================ types
 
@@ -97,6 +119,17 @@ export function ScreenerTab({
   const qc = useQueryClient();
   const [mode, setMode] = useState<"filters" | "multi">("filters");
 
+  // ------------------------------------------------------------ screener iframe
+  const appDark = () =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const [screenerSrc, setScreenerSrc] = useState(() => {
+    const base = "/screener.html";
+    const hash = initialSector ? screenerHash({ sector: initialSector }) : "";
+    const theme = appDark() ? "?theme=dark" : "";
+    return `${base}${theme}${hash}`;
+  });
+  const [screenerKey, setScreenerKey] = useState(0);
+
   // ------------------------------------------------------------ saved screens
   const [savedOpen, setSavedOpen] = useState(false);
   const [savedSearch, setSavedSearch] = useState("");
@@ -129,31 +162,6 @@ export function ScreenerTab({
     const q = savedSearch.trim().toLowerCase();
     return (saved ?? []).filter((s) => !q || s.name.toLowerCase().includes(q));
   }, [saved, savedSearch]);
-
-  // ------------------------------------------------------------ filters mode
-  const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
-  const [sector, setSector] = useState(initialSector ?? "all");
-  const [sort, setSort] = useState("marketCap");
-  const [dir, setDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    const t = setTimeout(() => { setDebouncedQ(q); setPage(1); }, 350);
-    return () => clearTimeout(t);
-  }, [q]);
-
-  const { data, isLoading } = useQuery<StocksResponse>({
-    queryKey: ["screener", debouncedQ, sector, sort, dir, page],
-    queryFn: async () => {
-      const params = new URLSearchParams({ q: debouncedQ, sector, sort, dir, page: String(page), perPage: "25" });
-      const res = await fetch(`/api/stocks?${params}`);
-      if (!res.ok) throw new Error("screener failed");
-      return res.json();
-    },
-    placeholderData: keepPreviousData,
-    enabled: isPro,
-  });
 
   // ------------------------------------------------------------ multi mode
   const [catalog, setCatalog] = useState<ScanGroup[] | null>(null);
@@ -221,9 +229,10 @@ export function ScreenerTab({
       toast({ title: "Give the view a name first" });
       return;
     }
-    // Quick filters snapshot search/sector/sort/direction; multi snapshots the scan set.
-    const kind = mode === "multi" ? "multi" : "filters";
-    const definition = kind === "multi" ? { ids: sel, min: minMatch } : { q, sector, sort, dir };
+    // Multi snapshots the scan set. The full screener saves its own screens
+    // (localStorage, inside the embedded tool) — this covers multi-scan sets.
+    const kind = "multi";
+    const definition = { ids: sel, min: minMatch };
     setSaving(true);
     try {
       const res = await fetch("/api/screens", {
@@ -277,13 +286,10 @@ export function ScreenerTab({
         setMode("multi");
         void runMulti(def.ids.slice(0, 8), Math.max(2, def.min ?? 2));
       } else if (s.kind === "filters") {
-        // Quick-filter view: restore search text, sector, sort chip and direction.
-        const knownSort = SORTS.some((x) => x.id === def.sort);
-        setQ(typeof def.q === "string" ? def.q : "");
-        setSector(typeof def.sector === "string" && def.sector ? def.sector : "all");
-        setSort(knownSort ? (def.sort as string) : "marketCap");
-        setDir(def.dir === "asc" ? "asc" : "desc");
-        setPage(1);
+        // Quick-filter view — open the full screener with the saved search /
+        // sector / sort mapped into its URL-hash state.
+        setScreenerSrc(`/screener.html${appDark() ? "?theme=dark" : ""}${screenerHash(def)}`);
+        setScreenerKey((k) => k + 1);
         setMode("filters");
       }
       setSavedOpen(false);
@@ -293,13 +299,8 @@ export function ScreenerTab({
   };
 
   // ------------------------------------------------------------ render helpers
-  const totalPages = (total: number, perPage: number) => Math.max(1, Math.ceil(total / perPage));
-  const setSortAndDir = (id: string, cur: string, setS: (v: string) => void, setD: (v: "asc" | "desc") => void, curD: "asc" | "desc") => {
-    if (id === cur) setD(curD === "desc" ? "asc" : "desc");
-    else { setS(id); setD("desc"); }
-  };
 
-  /** Name-and-save editor for quick filters / multi views. */
+  /** Name-and-save editor for multi views. */
   const saveEditor = (
     <div className="flex items-center gap-1.5">
       <Input
@@ -322,9 +323,8 @@ export function ScreenerTab({
 
   if (!isPro) return <ScreenerUpgradePanel onUpgrade={onUpgrade} />;
 
-  const activeCount = data?.total ?? 0;
   const headerCount =
-    mode === "filters" ? (data ? `${activeCount.toLocaleString("en-IN")} matches` : "Screener")
+    mode === "filters" ? "Full-universe screener"
     : (multi ? `${multi.total.toLocaleString("en-IN")} confluence matches` : "Multi-scan confluence");
 
   return (
@@ -332,7 +332,7 @@ export function ScreenerTab({
       {/* header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">Screener · all 3,551 NSE stocks</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">Screener · NSE universe · EOD 4 pm IST</div>
           <h2 className="text-lg font-bold tracking-tight text-zinc-100">{headerCount}</h2>
         </div>
         <div className="flex items-center gap-2">
@@ -386,13 +386,14 @@ export function ScreenerTab({
               </div>
             )}
           </div>
-          {/* export (filters & multi — the builder exports from its own result row) */}
+          {/* export — multi only (the full screener exports from its own toolbar) */}
+          {mode === "multi" && (
           <Button
             variant="outline"
             size="sm"
             className="h-8 gap-1.5 border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-200 hover:bg-zinc-800"
             onClick={() => {
-              if (mode === "multi" && multi) {
+              if (multi) {
                 exportCsv(
                   `tradepulse-multiscan-${csvDate()}.csv`,
                   ["Symbol", "Name", "Price", "Change %", "Matches", "Scans", "RS", "Market cap Cr"],
@@ -401,32 +402,17 @@ export function ScreenerTab({
                     r.scans.join(" | "), r.rs, r.marketCap != null ? Math.round(r.marketCap / 1e7) : null,
                   ])
                 );
-              } else if (mode === "filters") {
-                if (!data || data.stocks.length === 0) {
-                  toast({ title: "Nothing to export yet" });
-                  return;
-                }
-                exportCsv(
-                  `tradepulse-screener-${csvDate()}.csv`,
-                  ["Symbol", "Name", "Price", "Change %", "Volume", "Vol vs 20D avg", "RSI", "1M %", "3M %", "6M %", "P/E", "From 52W high %", "Market cap Cr", "Sector"],
-                  data.stocks.map((r) => [
-                    r.symbol.replace(".NS", ""), r.name, r.price, r.changePct, r.volume,
-                    r.relVol != null ? Number(r.relVol.toFixed(2)) : null, r.rsi14,
-                    r.mom1M, r.mom3M, r.mom6M, r.peTTM, r.fromHighPct,
-                    r.marketCap != null ? Math.round(r.marketCap / 1e7) : null, r.sector,
-                  ])
-                );
+                toast({ title: "CSV exported" });
               } else {
                 toast({ title: "Nothing to export yet" });
-                return;
               }
-              toast({ title: "CSV exported" });
             }}
           >
             Export CSV
           </Button>
-          {/* save current view — quick filters anchor to the filter bar; multi anchors here */}
-          {(mode === "multi" || mode === "filters") && (
+          )}
+          {/* save current view — multi anchors here; the full screener saves its own screens */}
+          {mode === "multi" && (
             saveOpen ? (
               saveEditor
             ) : (
@@ -446,7 +432,7 @@ export function ScreenerTab({
       {/* mode switcher */}
       <div className="flex w-fit items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1">
         {([
-          { id: "filters", label: "Quick filters", icon: Search },
+          { id: "filters", label: "Screener", icon: Radar },
           { id: "multi", label: "Multi-scan", icon: Layers },
         ] as const).map((m) => (
           <button
@@ -463,52 +449,19 @@ export function ScreenerTab({
         ))}
       </div>
 
-      {/* ------------------------------------------------ filters mode */}
+      {/* ------------------------------------------------ filters mode —
+          the full TradingView-style screener (single-file tool fed from the
+          TradePulse database). Embedded so it keeps its own state, theme and
+          localStorage screens; hash links map saved quick-filter views in. */}
       {mode === "filters" && (
-        <>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-600" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search symbol or company…"
-                className="h-9 w-56 border-zinc-800 bg-zinc-900 pl-8 text-xs text-zinc-100"
-              />
-            </div>
-            <select
-              value={sector}
-              onChange={(e) => { setSector(e.target.value); setPage(1); }}
-              className="h-9 rounded-md border border-zinc-800 bg-zinc-900 px-2 text-xs text-zinc-300"
-              aria-label="Sector filter"
-            >
-              <option value="all">All sectors</option>
-              {(data?.sectors ?? []).filter(Boolean).map((s) => (
-                <option key={s as string} value={s as string}>{s as string}</option>
-              ))}
-            </select>
-            <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              {SORTS.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => { setSortAndDir(s.id, sort, setSort, setDir, dir); setPage(1); }}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[11px] transition-colors",
-                    sort === s.id ? "bg-brand/15 text-brand-text" : "text-zinc-500 hover:text-zinc-300"
-                  )}
-                >
-                  {s.label}{sort === s.id && (dir === "desc" ? " ↓" : " ↑")}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <ResultsTable rows={data?.stocks} isLoading={isLoading} onSelectStock={onSelectStock} />
-
-          {data && data.total > data.perPage && (
-            <Pager page={page} totalPages={totalPages(data.total, data.perPage)} onPage={setPage} />
-          )}
-        </>
+        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-inner">
+          <iframe
+            key={screenerKey}
+            src={screenerSrc}
+            title="TradePulse stock screener"
+            className="h-[calc(100vh-215px)] min-h-[620px] w-full border-0 bg-transparent"
+          />
+        </div>
       )}
 
       {/* ------------------------------------------------ multi-scan mode */}
