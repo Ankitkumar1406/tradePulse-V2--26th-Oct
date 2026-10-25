@@ -16,9 +16,14 @@
  */
 
 import { db, descNullsLast } from "@/lib/db";
-import { computeIndicators, computeExtendedIndicators, emaSeries, sma } from "@/lib/indicators";
+import {
+  computeIndicators, computeExtendedIndicators, emaSeries, sma, weeklyCloses,
+  atr, stochastic, adx, cci, williamsR, awesomeOscillator, ultimateOscillator,
+  supertrend, volatility, beta as betaOf, computeTechRating, macd as macdOf, type Bar,
+} from "@/lib/indicators";
 import { weightedRs } from "@/lib/ratings";
 import { expectedLatestBarDate } from "@/lib/bar-sync";
+import { fetchChart } from "@/lib/yahoo";
 
 interface MetricsGlobals {
   __tpMetricsRunning?: boolean;
@@ -28,9 +33,52 @@ const g = globalThis as unknown as MetricsGlobals;
 const CHUNK = 400; // symbols per chunk (bars query + bulk insert)
 const MIN_SESSION_ROWS = 800; // a "full" NSE session — below this the bars are still trickling
 
+// --- Nifty index closes for beta ------------------------------------------
+// One ^NSEI chart fetch per metrics run, cached per session date. Beta needs
+// an aligned daily return series — null-safe: an index fetch failure only
+// blanks beta1Y, never blocks the metrics run.
+let indexCache: { date: string; byDate: Map<string, number> } | null = null;
+
+async function indexClosesByDate(sessionDate: string): Promise<Map<string, number>> {
+  if (indexCache && indexCache.date === sessionDate) return indexCache.byDate;
+  try {
+    const chart = await fetchChart("^NSEI", "2y");
+    const q = chart.indicators?.quote?.[0];
+    const ts = chart.timestamp ?? [];
+    const closes = q?.close ?? [];
+    const byDate = new Map<string, number>();
+    for (let i = 0; i < ts.length; i++) {
+      const c = closes[i];
+      if (c != null && Number.isFinite(c) && c > 0) {
+        byDate.set(new Date(ts[i] * 1000).toISOString().slice(0, 10), c);
+      }
+    }
+    indexCache = { date: sessionDate, byDate };
+    return byDate;
+  } catch {
+    indexCache = { date: sessionDate, byDate: new Map() };
+    return indexCache.byDate;
+  }
+}
+
+const dailyReturns = (rows: { date: string; close: number }[]): Map<string, number> => {
+  const rets = new Map<string, number>();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i - 1].close > 0) rets.set(rows[i].date, rows[i].close / rows[i - 1].close - 1);
+  }
+  return rets;
+};
+
 const r6 = (x: number | null | undefined): number | null =>
   x == null || !Number.isFinite(x) ? null : Number(x.toFixed(6));
 const b = (v: boolean | null | undefined): boolean | null => (v == null ? null : v);
+
+/** MACD histogram one bar back — drives the MACD rating vote. */
+function macdHistPrev(closes: number[]): number | null {
+  if (closes.length < 36) return null;
+  const m = macdOf(closes.slice(0, -1));
+  return m.hist;
+}
 
 export interface MetricsOutcome {
   ok: boolean;
@@ -109,9 +157,14 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
         wRsi14: true,
         wMacdHist: true,
         volSpike: true,
+        mom3Y: true,
+        mom5Y: true,
+        fromAthPct: true,
       },
       orderBy: descNullsLast("marketCap"),
     });
+
+    const idxByDate = await indexClosesByDate(date);
 
     // Rebuild the whole session atomically: wipe any partial run, then insert.
     await db.stockMetrics.deleteMany({ where: { date } });
@@ -146,11 +199,19 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
         const ind = computeIndicators(closes);
         const series: [number, number][] = list.map((r) => [Date.parse(`${r.date}T00:00:00Z`) / 1000, r.close]);
         const ext = computeExtendedIndicators(series);
+        const bars: Bar[] = list.map((r) => ({
+          open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume,
+        }));
+        const e10s = emaSeries(closes, 10);
         const e50s = emaSeries(closes, 50);
+        const e100s = emaSeries(closes, 100);
         const e200s = emaSeries(closes, 200);
+        const ema10 = e10s[n - 1] ?? null;
         const ema50 = e50s[n - 1] ?? null;
+        const ema100 = e100s[n - 1] ?? null;
         const ema200 = e200s[n - 1] ?? null;
         const sma100 = sma(closes, 100);
+        const sma10 = sma(closes, 10);
 
         // 52-week window (up to 252 sessions)
         const w = list.slice(-252);
@@ -167,14 +228,78 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
         const mom12M =
           n > 252 && closes[n - 1 - 252] > 0 ? ((close / closes[n - 1 - 252]) - 1) * 100 : null;
 
-        // volume health
+        // volume health (10 / 20 / 30 / 50 / 90-session averages)
+        const avgVol = (p: number): number | null => {
+          const win = list.slice(-p);
+          const avg = win.reduce((a, r) => a + (r.volume || 0), 0) / Math.max(1, win.length);
+          return avg > 0 ? avg : null;
+        };
+        const avgVol10 = avgVol(10);
         const last20 = list.slice(-20);
         const avgVol20 = last20.reduce((a, r) => a + (r.volume || 0), 0) / Math.max(1, last20.length) || null;
+        const avgVol30 = avgVol(30);
         const last50 = list.slice(-50);
         const avgVol50 = last50.reduce((a, r) => a + (r.volume || 0), 0) / Math.max(1, last50.length) || null;
+        const avgVol90 = avgVol(90);
         const todayVol = list[n - 1].volume || 0;
         const volVsAvg20 = avgVol20 ? todayVol / avgVol20 : null;
         const turnover20Cr = avgVol20 ? (close * avgVol20) / 10_000_000 : null;
+        const valueTradedCr = todayVol > 0 ? (close * todayVol) / 10_000_000 : null;
+
+        // gap % — session open vs the prior close (needs the previous bar)
+        const gapPct =
+          n >= 2 && list[n - 2].close > 0 && list[n - 1].open > 0
+            ? ((list[n - 1].open - list[n - 2].close) / list[n - 2].close) * 100
+            : null;
+
+        // performance windows
+        const perf1W = n > 5 && closes[n - 1 - 5] > 0 ? ((close / closes[n - 1 - 5]) - 1) * 100 : null;
+        const momentum10 = n > 10 && closes[n - 1 - 10] > 0 ? ((close / closes[n - 1 - 10]) - 1) * 100 : null;
+        let perfYTD: number | null = null;
+        for (let i = n - 1; i >= 0; i--) {
+          if (list[i].date < `${date.slice(0, 4)}-01-01`) {
+            if (list[i].close > 0) perfYTD = ((close / list[i].close) - 1) * 100;
+            break;
+          }
+        }
+
+        // volatility + beta (vs ^NSEI, aligned by session date)
+        const volatM = volatility(closes, 21, 252);
+        const weekly = weeklyCloses(series);
+        const volatW = weekly.length >= 9 ? volatility(weekly, 8, 52) : null;
+        let beta1Y: number | null = null;
+        if (idxByDate.size > 0) {
+          const symAligned: number[] = [];
+          const idxRets: number[] = [];
+          for (let i = 1; i < n; i++) {
+            const ir = idxByDate.get(list[i].date);
+            if (ir != null && list[i - 1].close > 0) {
+              symAligned.push(list[i].close / list[i - 1].close - 1);
+              idxRets.push(ir);
+            }
+          }
+          beta1Y = betaOf(symAligned, idxRets);
+        }
+
+        // 20-session range tightness (VCP proxy)
+        let h20 = -Infinity;
+        let l20 = Infinity;
+        for (const r of list.slice(-20)) {
+          if (r.high > h20) h20 = r.high;
+          if (r.low < l20) l20 = r.low;
+        }
+        const rangeTight20 = close > 0 && Number.isFinite(h20) ? ((h20 - l20) / close) * 100 : null;
+
+        // OHLC-based oscillator suite
+        const atr14 = atr(bars, 14);
+        const stoch = stochastic(bars);
+        const adx14 = adx(bars, 14);
+        const cci20 = cci(bars, 20);
+        const wr = williamsR(bars, 14);
+        const ao = awesomeOscillator(bars);
+        const aoPrev = bars.length >= 35 ? awesomeOscillator(bars.slice(0, -1)) : null;
+        const uo = ultimateOscillator(bars);
+        const st = supertrend(bars, 10, 3);
 
         // raw 13-week up/down volume ratio (the A/D rating's underlying)
         const ad = list.slice(-65);
@@ -185,6 +310,22 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
           else if (r.close < r.open) downVol += r.volume;
         }
         const adRatio = upVol + downVol > 0 ? upVol / Math.max(1, downVol) : null;
+
+        // TradingView-style composite rating (oscillators + moving averages)
+        const tech = computeTechRating({
+          price: close,
+          rsi14: ind.rsi14,
+          stochK: stoch.k,
+          williamsR: wr,
+          cci20,
+          ao,
+          aoPrev,
+          uo,
+          macdHist: ind.macdHist,
+          macdHistPrev: macdHistPrev(closes),
+          smas: [sma10, ind.sma20, ind.sma50, sma100, ind.sma200],
+          emas: [ema10, ind.ema20, ema50, ema100, ema200],
+        });
 
         // raw weighted 12M momentum (what rsRating ranks)
         const rsMomentum = weightedRs(
@@ -239,10 +380,43 @@ export async function computeStockMetrics(opts?: { date?: string; force?: boolea
           epsScore: s.epsScore ?? null,
           adRating: s.adRating ?? null,
           adRatio: r6(adRatio),
+          // --- extended technicals (TradingView-style) ---
+          sma10: r6(sma10),
+          ema10: r6(ema10),
+          ema100: r6(ema100),
+          momentum10: r6(momentum10),
+          stochK: r6(stoch.k),
+          stochD: r6(stoch.d),
+          adx14: r6(adx14),
+          cci20: r6(cci20),
+          williamsR: r6(wr),
+          ao: r6(ao),
+          uo: r6(uo),
+          stVal: r6(st.value),
+          stDir: st.dir ?? null,
+          atr14: r6(atr14),
+          gapPct: r6(gapPct),
+          avgVol10: r6(avgVol10),
+          avgVol30: r6(avgVol30),
+          avgVol90: r6(avgVol90),
+          valueTradedCr: r6(valueTradedCr),
+          perf1W: r6(perf1W),
+          perfYTD: r6(perfYTD),
+          perf3Y: r6(s.mom3Y),
+          perf5Y: r6(s.mom5Y),
+          volatM: r6(volatM),
+          volatW: r6(volatW),
+          beta1Y: r6(beta1Y),
+          rangeTight20: r6(rangeTight20),
+          fromAthPct: r6(s.fromAthPct),
+          techScore: tech.total,
+          techRating: tech.rating,
+          oscRating: tech.oscLabel,
+          maRating: tech.maLabel,
         });
       }
 
-      // ~45 cols × 400 rows ≈ 18k params — under Prisma's 32,767 ceiling.
+      // ~73 cols × 400 rows ≈ 29k params — under Prisma's 32,767 ceiling.
       for (let k = 0; k < rows.length; k += 400) {
         await db.stockMetrics.createMany({ data: rows.slice(k, k + 400) as never, skipDuplicates: true });
       }

@@ -10,8 +10,9 @@
 import { db, descNullsLast } from "@/lib/db";
 import { fetchUniversePage, fetchSpark, type ScreenerQuote, type SparkPoint } from "@/lib/yahoo";
 import { computeIndicators, computeExtendedIndicators } from "@/lib/indicators";
+import { refreshBseQuotes } from "@/lib/bse";
 import { evaluateAlerts } from "@/lib/alerts";
-import { startSectorTrickle, startBarsTrickle, startEarningsTrickle, startFinancialsTrickle } from "@/lib/trickle";
+import { startSectorTrickle, startBarsTrickle, startEarningsTrickle, startFinancialsTrickle, startFundamentalsTrickle } from "@/lib/trickle";
 import { nextAutoUpdateIso } from "@/lib/scheduler";
 import { recomputeRatings } from "@/lib/ratings";
 import { runPostSyncPipeline } from "@/lib/pipeline";
@@ -161,6 +162,10 @@ async function runSync(mode: SyncMode) {
     startBarsTrickle();
     startEarningsTrickle();
     startFinancialsTrickle();
+    // Deep fundamentals (StockFundamentals) — refreshes stale rows in the
+    // background after every sync so the screener's fundamental filters are
+    // always fed from the database, never from a live-API call.
+    startFundamentalsTrickle();
     // MarketSmith-style ratings (RS / EPS score / A-D) — background recompute,
     // then the precompute chain (metrics → scan results) so StockMetrics rows
     // carry the freshly ranked ratings.
@@ -253,6 +258,11 @@ async function upsertQuotes(quotes: ScreenerQuote[]) {
 async function runUniversePhase() {
   await db.syncState.updateMany({ where: { id: "main" }, data: { phase: "universe", status: "running" } });
   await runUniversePageLoop();
+  // BSE mirror (real .BO quotes; seeds itself on the first run, then just
+  // refreshes). A failure here must never fail the whole universe phase.
+  await refreshBseQuotes().catch((e) =>
+    console.error("[sync] bse quotes:", e instanceof Error ? e.message : e)
+  );
 }
 
 // ---------------------------------------------------------------- closes
@@ -297,7 +307,10 @@ export async function runClosesPhase(opts?: { staleCutoff?: Date }) {
     const batch = stocks.slice(i, i + batchSize);
     const symbols = batch.map((s) => s.symbol);
     try {
-      const sparks = await fetchSpark(symbols, "2y");
+      // 6y series — powers 3Y/5Y performance and the all-time-high distance
+      // alongside the 2y indicator windows (spark returns one compact close
+      // series; the extra depth costs the same single request per batch).
+      const sparks = await fetchSpark(symbols, "6y");
       const bySymbol = new Map(sparks.map((s) => [s.symbol, s]));
       // Compute all payloads first, then commit the whole batch in ONE
       // transaction — 20 rows per commit instead of 20 separate WAL commits.
@@ -356,6 +369,17 @@ function buildSparkUpdate(
   const fromLowPct = low52 > 0 ? Math.max(0, ((price - low52) / low52) * 100) : null;
   const volSpike = stock.volume != null && stock.avgVol3M != null && stock.avgVol3M > 0 ? stock.volume > 2 * stock.avgVol3M : null;
 
+  // Long-horizon performance + ATH distance (deep history — 6y spark gives
+  // ~1,480 sessions; a 2y series yields nulls here until it is re-fetched).
+  const momFor = (days: number): number | null =>
+    series.length > days && series[series.length - 1 - days][1] > 0
+      ? ((price / series[series.length - 1 - days][1]) - 1) * 100
+      : null;
+  const mom3Y = momFor(756);
+  const mom5Y = momFor(1260);
+  const ath = Math.max(...closes);
+  const fromAthPct = ath > 0 ? Math.max(0, ((ath - price) / ath) * 100) : null;
+
   return {
     sma20: ind.sma20,
     sma50: ind.sma50,
@@ -389,6 +413,9 @@ function buildSparkUpdate(
     distEma50Pct: ext.distEma50Pct,
     distEma100Pct: ext.distEma100Pct,
     distEma200Pct: ext.distEma200Pct,
+    mom3Y,
+    mom5Y,
+    fromAthPct,
     closes: JSON.stringify(series),
     closesSynced: new Date(),
   };

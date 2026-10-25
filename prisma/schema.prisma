@@ -111,6 +111,13 @@ model Stock {
   wHigh  Float?
   wLow   Float?
   wClose Float?
+
+  // Long-horizon performance + all-time-high distance, computed from the
+  // (6y) close series during the closes phase. Null until the series is long
+  // enough (recent IPOs / first sync).
+  mom3Y      Float? // % return ~756 trading days
+  mom5Y      Float? // % return ~1260 trading days
+  fromAthPct Float? // % below the highest close in the synced history (0 = at ATH)
   quoteTime      DateTime?
   universeSynced DateTime?
   createdAt      DateTime  @default(now())
@@ -182,6 +189,8 @@ model SyncState {
   earningsDone  Int       @default(0)
   financialsTotal Int     @default(0)
   financialsDone  Int     @default(0)
+  fundamentalsTotal Int   @default(0)
+  fundamentalsDone  Int   @default(0)
   ratingsSynced DateTime?
   lastError     String?
   startedAt     DateTime?
@@ -266,6 +275,48 @@ model StockMetrics {
   adRating  String? // A+ … E accumulation/distribution grade
   adRatio   Float?  // raw 13-week up-volume / down-volume ratio
 
+  // --- TradingView-style extended technicals (computed from OHLCV bars) ---
+  sma10  Float?
+  ema10  Float?
+  ema100 Float?
+  momentum10 Float? // % return over 10 sessions
+
+  stochK    Float? // Stochastic %K (14, 3, 3)
+  stochD    Float? // Stochastic %D (signal of %K)
+  adx14     Float? // trend-strength 0-100
+  cci20     Float?
+  williamsR Float? // Williams %R (14), 0 to -100
+  ao        Float? // Awesome Oscillator (median-price SMA5 − SMA34)
+  uo        Float? // Ultimate Oscillator (7, 14, 28)
+
+  stVal Float? // Supertrend (10, 3×ATR) line value
+  stDir Int?   // Supertrend direction: 1 = uptrend (price above), -1 = downtrend
+
+  atr14    Float? // absolute ATR(14) in ₹
+  gapPct   Float? // (open − prev close) / prev close × 100
+
+  avgVol10     Float?
+  avgVol30     Float?
+  avgVol90     Float?
+  valueTradedCr Float? // close × volume / 1e7 (₹ crore, session turnover)
+
+  perf1W  Float? // % return over ~5 sessions
+  perfYTD Float? // % return since Jan 1 (first close of the year)
+  perf3Y  Float? // carried from Stock.mom3Y (6y close series)
+  perf5Y  Float? // carried from Stock.mom5Y
+
+  volatM Float? // annualised σ of daily returns over 21 sessions, %
+  volatW Float? // annualised σ of weekly returns over 8 weeks, %
+  beta1Y Float? // 1Y beta vs ^NSEI (cov/var of daily returns)
+
+  rangeTight20 Float? // 20-session high-low range as % of close (VCP tightness proxy)
+  fromAthPct   Float? // carried from Stock (0 = at the synced-history high)
+
+  techScore  Int?    // composite −1..+1 scaled to −100..+100 (oscillators + MAs)
+  techRating String? // Strong Sell | Sell | Neutral | Buy | Strong Buy (composite)
+  oscRating  String? // oscillator-group rating
+  maRating   String? // moving-average-group rating
+
   computedAt DateTime @default(now())
 
   @@unique([symbol, date])
@@ -344,6 +395,19 @@ model StockFundamentals {
   peg            Float? // P2 — approximate
   instHoldingPct Float? // P2 — proxy
   insiderHoldingPct Float? // P2 — proxy
+
+  // Statement-sourced fields (cashflowStatementHistory / balanceSheetHistory /
+  // incomeStatementHistory annuals, latest FY) + analyst consensus (financialData)
+  beta            Float? // 5y monthly beta from summaryDetail
+  analystRating   Float? // recommendationMean: 1 = Strong Buy … 5 = Strong Sell
+  analystCount    Int?   // numberOfAnalystOpinions
+  targetPrice     Float? // targetMeanPrice, INR
+  totalAssets     Float? // INR, latest FY
+  totalLiabilities Float? // INR, latest FY
+  equity          Float? // stockholders' equity, INR, latest FY
+  grossProfit     Float? // INR, latest FY
+  operatingIncome Float? // INR, latest FY
+  icf             Float? // investing cash flow, INR, latest FY
 
   // quarterly / annual slices, index 0 = latest (q0 / fy0)
   epsQuarterlys      Json? // [q0..q7] EPS ₹

@@ -140,7 +140,11 @@ export async function yahooFetch<T>(opts: FetchOpts): Promise<T> {
 }
 
 function needsCrumb(url: string): boolean {
-  return url.includes("/v7/finance/spark") || url.includes("/v10/finance/quoteSummary");
+  return (
+    url.includes("/v7/finance/spark") ||
+    url.includes("/v10/finance/quoteSummary") ||
+    url.includes("/v7/finance/quote")
+  );
 }
 
 // ---------- Types ----------
@@ -176,6 +180,25 @@ export interface SparkPoint {
   symbol: string;
   timestamp: number[];
   close: (number | null)[];
+}
+
+/**
+ * Batched snapshot quotes (v7/quote) — used by the BSE mirror universe where
+ * symbols come from the NSE list mapped to .BO rather than the India screener
+ * (which has no BSE exchange facet). Same numeric fields as ScreenerQuote.
+ */
+export async function fetchQuotesBatch(
+  symbols: string[]
+): Promise<(ScreenerQuote & { marketCap2?: number })[]> {
+  if (symbols.length === 0) return [];
+  const d = await yahooFetch<{
+    quoteResponse?: { result?: (ScreenerQuote & { marketCap?: number })[]; error?: unknown };
+  }>({
+    url: `${QUERY2}/v7/finance/quote`,
+    query: { symbols: symbols.join(","), region: "IN", lang: "en-IN" },
+    timeoutMs: 25000,
+  });
+  return (d.quoteResponse?.result ?? []) as ScreenerQuote[];
 }
 
 export interface ChartResult {

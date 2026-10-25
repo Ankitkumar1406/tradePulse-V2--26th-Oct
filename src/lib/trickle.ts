@@ -6,6 +6,7 @@
 
 import { db, toPgSql, descNullsLast } from "@/lib/db";
 import { fetchAssetProfile, fetchEarningsDate, fetchFinancials } from "@/lib/yahoo";
+import { fetchFundamentalsFor, upsertFundamentals } from "@/lib/fundamentals";
 import { STALE_DATA_MS } from "@/lib/sync";
 import { resolveTaxonomy } from "@/lib/taxonomy";
 import { syncSymbolBars, expectedLatestBarDate } from "@/lib/bar-sync";
@@ -15,6 +16,7 @@ interface TrickleGlobals {
   __tpBarsTrickle?: boolean;
   __tpEarningsTrickle?: boolean;
   __tpFinancialsTrickle?: boolean;
+  __tpFundamentalsTrickle?: boolean;
 }
 const g = globalThis as unknown as TrickleGlobals;
 
@@ -266,6 +268,52 @@ export function startFinancialsTrickle() {
       console.error("[trickle] financials:", e instanceof Error ? e.message : e);
     } finally {
       g.__tpFinancialsTrickle = false;
+    }
+  })();
+}
+
+
+// ---------------------------------------------------------------- fundamentals
+
+/**
+ * Deep fundamentals (StockFundamentals) — snapshot ratios, annual income /
+ * balance-sheet / cashflow statements and analyst consensus, one quoteSummary
+ * call per symbol. Walks the universe biggest-mcap-first whenever rows go
+ * stale (>3 days) or are missing entirely, so every EOD leaves the
+ * fundamental layer a little fresher and the whole universe converges every
+ * few days (statements move quarterly — a polite trickle beats a nightly
+ * 3,600-call hammer that would trip Yahoo rate limits).
+ */
+export function startFundamentalsTrickle() {
+  if (g.__tpFundamentalsTrickle) return;
+  g.__tpFundamentalsTrickle = true;
+  void (async () => {
+    try {
+      for (;;) {
+        const cutoff = new Date(Date.now() - 3 * 24 * 3600 * 1000);
+        const pendingSymbols = await db.$queryRaw<{ symbol: string }[]>`
+          SELECT s.symbol FROM "Stock" s
+          LEFT JOIN "StockFundamentals" f ON f.symbol = s.symbol
+          WHERE s.price IS NOT NULL AND (f.symbol IS NULL OR f."fetchedAt" < ${cutoff})
+          ORDER BY s."marketCap" DESC NULLS LAST
+          LIMIT 400
+        `;
+        await bumpCounters({ fundamentalsTotal: pendingSymbols.length, fundamentalsDone: 0 });
+        if (pendingSymbols.length === 0) break;
+        let done = 0;
+        for (const { symbol } of pendingSymbols) {
+          const norm = await fetchFundamentalsFor(symbol).catch(() => null);
+          await upsertFundamentals(symbol, norm);
+          done++;
+          if (done % 25 === 0) await bumpCounters({ fundamentalsDone: done });
+          await sleep(250);
+        }
+        await bumpCounters({ fundamentalsDone: done });
+      }
+    } catch (e) {
+      console.error("[trickle] fundamentals:", e instanceof Error ? e.message : e);
+    } finally {
+      g.__tpFundamentalsTrickle = false;
     }
   })();
 }
