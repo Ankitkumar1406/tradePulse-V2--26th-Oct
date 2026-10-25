@@ -80,6 +80,10 @@ input, select { font: inherit; color: var(--text); }
 ::-webkit-scrollbar-track { background: transparent; }
 
 #app { display: flex; flex-direction: column; height: 100vh; }
+/* Fixed-height rows must never flex-shrink — otherwise a tall results table
+   (flex-basis:auto) squeezes the tabs row into an unreadable sliver. Only
+   .tablewrap (flex:1 1 auto, overflow:auto) absorbs the deficit. */
+#app > .topbar, #app > .filterbar, #app > .tabsrow, #app > .tablefoot { flex: 0 0 auto; }
 
 /* ============================================================ top bar */
 .topbar {
@@ -189,7 +193,12 @@ input, select { font: inherit; color: var(--text); }
   display: flex; align-items: center; gap: 4px;
   padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--bg);
   overflow-x: auto; scrollbar-width: none;
+  flex: 0 0 auto;
 }
+/* edge fades hint at off-screen tabs once the row overflows */
+.tabsrow.fade-l { mask-image: linear-gradient(to right, transparent 0, #000 18px); }
+.tabsrow.fade-r { mask-image: linear-gradient(to left, transparent 0, #000 18px); }
+.tabsrow.fade-l.fade-r { mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%); }
 .tabsrow::-webkit-scrollbar { display: none; }
 .tab {
   padding: 7px 11px 8px; font-size: 12.5px; font-weight: 600; color: var(--text-3);
@@ -518,7 +527,7 @@ table.grid tbody tr.inWl td:first-child .wl { color: var(--gold); }
   <div class="dbody" id="dbody"></div>
   <div class="dfoot">
     <button class="btn primary" id="dWl" style="flex:1"></button>
-    <a class="btn" id="dChart" target="_blank" rel="noopener" href="#">Open chart ↗</a>
+    <a class="btn" id="dChart" target="_blank" rel="noopener" href="#">Open chart</a>
   </div>
 </aside>
 
@@ -1227,6 +1236,16 @@ function renderTabs() {
     b.addEventListener("click", () => { state.tab = t.tab; state.page = 1; renderTabs(); renderTable(); });
     row.insertBefore(b, gear);
   }
+  updateTabsFade();
+  const active = row.querySelector(".tab.active");
+  if (active) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+/** Toggle the edge fades that hint at off-screen tabs. */
+function updateTabsFade() {
+  const row = $("tabsRow");
+  const canScroll = row.scrollWidth > row.clientWidth + 1;
+  row.classList.toggle("fade-l", canScroll && row.scrollLeft > 1);
+  row.classList.toggle("fade-r", canScroll && row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
 }
 
 function tabCols() {
@@ -1887,7 +1906,12 @@ function openDrawer(sym) {
   const wlBtn = $("dWl");
   wlBtn.textContent = inWl ? "★ Remove from Watchlist" : "☆ Add to Watchlist";
   wlBtn.onclick = () => { toggleWatchlist(sym); openDrawer(sym); };
-  $("dChart").href = `https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(sym)}`;
+  // Open chart — inside the app this asks the host page to open TradePulse's
+  // own technical chart for the symbol (postMessage → screener-tab.tsx →
+  // onSelectStock). Standalone fallback: TradingView in a new tab.
+  const chartBtn = $("dChart");
+  chartBtn.dataset.sym = sym;
+  chartBtn.href = `https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(sym)}`;
   $("drawer").classList.add("open");
   $("drawer").setAttribute("aria-hidden", "false");
 }
@@ -2175,6 +2199,26 @@ async function init() {
   $("btnClearLast").addEventListener("click", clearLastFilter);
   $("btnRetry").addEventListener("click", () => { DataAdapter._cache = null; init(); });
   $("drawerClose").addEventListener("click", closeDrawer);
+  // Open chart: when embedded in the app, defer to the host's own chart view.
+  $("dChart").addEventListener("click", (e) => {
+    if (!(window.parent && window.parent !== window)) return; // standalone → fall through to the href
+    e.preventDefault();
+    const sym = e.currentTarget.dataset.sym || "";
+    if (!sym) return;
+    try { window.parent.postMessage({ type: "tradepulse:openStock", symbol: sym }, window.location.origin); } catch {}
+    closeDrawer();
+  });
+  // Vertical wheel over the tabs row scrolls it horizontally (no visible scrollbar).
+  $("tabsRow").addEventListener("wheel", (e) => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    const row = e.currentTarget;
+    if (row.scrollWidth <= row.clientWidth) return;
+    e.preventDefault();
+    row.scrollLeft += e.deltaY;
+    updateTabsFade();
+  }, { passive: false });
+  $("tabsRow").addEventListener("scroll", updateTabsFade, { passive: true });
+  window.addEventListener("resize", updateTabsFade);
   $("pageSize").addEventListener("change", (e) => { state.pageSize = Number(e.target.value); state.page = 1; renderTable(); });
   $("market").addEventListener("change", (e) => {
     state.market = e.target.value;

@@ -130,6 +130,24 @@ export function ScreenerTab({
   });
   const [screenerKey, setScreenerKey] = useState(0);
 
+  // The embedded screener asks the host to open a stock's chart with a
+  // postMessage ("Open chart" in the row drawer) — route it into the app's
+  // own stock-detail chart view instead of any external chart site.
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const d = e.data as { type?: string; symbol?: unknown } | null;
+      if (!d || d.type !== "tradepulse:openStock") return;
+      // Screener universe symbols are bare ("RELIANCE"); the stock-detail API
+      // and the rest of the app use the Yahoo suffix form ("RELIANCE.NS").
+      const raw = typeof d.symbol === "string" ? d.symbol.trim().toUpperCase() : "";
+      if (!raw) return;
+      onSelectStock(raw.includes(".") ? raw : `${raw}.NS`);
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [onSelectStock]);
+
   // ------------------------------------------------------------ saved screens
   const [savedOpen, setSavedOpen] = useState(false);
   const [savedSearch, setSavedSearch] = useState("");
